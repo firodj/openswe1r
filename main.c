@@ -32,9 +32,6 @@ static SDL_Window* sdlWindow;
 
 uint32_t callId = 0;
 
-FILE* handles[10000];
-uint32_t handle_index = 1;
-
 unsigned int exportCount = 0;
 Export* exports = NULL;
 
@@ -45,6 +42,7 @@ void AddExport(const char* name, void* callback, Address address) {
   strcpy((char*)export->name, name);
   export->callback = callback;
   export->address = address;
+  export->thunkAddress = 0;
   export->hook = 1;
   exportCount++;
 }
@@ -56,6 +54,7 @@ void AddExport2(const char* name, void* callback) {
   strcpy((char*)export->name, name);
   export->callback = callback;
   export->address = 0;
+  export->thunkAddress = 0;
   export->hook = 2;
   exportCount++;
 }
@@ -97,6 +96,8 @@ uint32_t tls[1000] = {0};
 #include <unicorn/unicorn.h>
 
 static void UnknownImport(void* uc, Address address, void* user_data);
+
+
 Address CreateInterface(const char* name, unsigned int slotCount) {
   //FIXME: Unsure about most terminology / inner workings here
   Address interfaceAddress = Allocate(100); //FIXME: Size of object
@@ -2874,10 +2875,10 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
   eip = returnAddress;
   esp += 4;
   
-  info_printf("\nUnknown function!\n\n");
+  sys_printf("\nUnknown function!\n\n");
 
-  info_printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax);
-  info_printf("%7" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)user_data, returnAddress);
+  sys_printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax);
+  sys_printf("%7" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)user_data, returnAddress);
 
   callId++;
 
@@ -3071,6 +3072,7 @@ Exe* LoadExe(const char* path) {
           } else {
             if (true) { //(export->isVariable == false) {
               Address symAddress = export->hook == 2 ? CreateInt21() : CreateHlt();
+              export->thunkAddress = thunkAddress;
               AddHltHandler(symAddress, export->callback, (void*)label);
               *symbolAddress = symAddress;
               sys_printf("found at 0x%08X\n", symAddress);
@@ -3138,7 +3140,7 @@ void RunX86(Exe* exe) {
 
   //FIXME: Schedule a virtual main-thread
   sys_printf("Emulation starting\n");
-  CreateEmulatedThread(exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint);
+  CreateEmulatedThread(exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint, false);
   RunEmulation();
 
   CleanupEmulation();

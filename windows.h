@@ -83,6 +83,7 @@ enum {
   API(VK_RMENU) = 0xA5
 };
 
+#define API__CREATE_SUSPENDED  0x00000004
 
 static int sprintf_ucs2(uint16_t* str, const char* fmt, ...) {
   va_list args;

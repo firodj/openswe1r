@@ -55,10 +55,10 @@ HACKY_IMPORT_END2(3)
 
 //Kernel32.lib
 HACKY_IMPORT_BEGIN2(HeapAlloc)
-  my_printf("HeapAlloc ");
-  my_printf("hHeap:0x%" PRIX32 " ", stack[1]);
-  my_printf("dwFlags:0x%" PRIX32 " ", stack[2]);
-  my_printf("dwBytes:0x%" PRIX32 "\n", stack[3]);
+  //my_printf("HeapAlloc ");
+  //my_printf("hHeap:0x%" PRIX32 " ", stack[1]);
+  //my_printf("dwFlags:0x%" PRIX32 " ", stack[2]);
+  //my_printf("dwBytes:0x%" PRIX32 "\n", stack[3]);
   eax = Allocate(stack[3]);
   //FIXME: Only do this if flag is set..
   memset(Memory(eax), 0x00, stack[3]);
@@ -116,11 +116,6 @@ HACKY_IMPORT_BEGIN(TlsSetValue)
   tls[stack[1]] = stack[2];
   eax = 1; // nonzero if succeeds
   esp += 2 * 4;
-HACKY_IMPORT_END()
-
-//Kernel32.lib
-HACKY_IMPORT_BEGIN(GetCurrentThreadId)
-  eax = 666; // nonzero if succeeds
 HACKY_IMPORT_END()
 
 //Kernel32.lib
@@ -488,49 +483,51 @@ HACKY_IMPORT_END()
 
 // Thread related
 //Kernel32.lib
-HACKY_IMPORT_BEGIN(CreateThread)
+HACKY_IMPORT_BEGIN2(CreateThread)
   // Loading in a worker-thread during a loadscreen - Acclaim.. gj.. NOT!
-  hacky_printf("lpThreadAttributes 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwStackSize 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpStartAddress 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpParameter 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("dwCreationFlags 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("lpThreadId 0x%" PRIX32 "\n", stack[6]);
+  my_printf("CreateThread ");
+  my_printf("lpThreadAttributes:0x%" PRIX32 " ", stack[1]);
+  my_printf("dwStackSize:0x%" PRIX32 " ", stack[2]);
+  my_printf("lpStartAddress:0x%" PRIX32 " ", stack[3]);
+  my_printf("lpParameter:0x%" PRIX32 " ", stack[4]);
+  my_printf("dwCreationFlags:0x%" PRIX32 " ", stack[5]);
+  my_printf("lpThreadId:0x%" PRIX32 " ", stack[6]);
 
-  //CreateEmulatedThread(stack[3]);
+  bool suspended = stack[5] & API(CREATE_SUSPENDED);
+  eax = CreateEmulatedThread(stack[3], suspended);
 
-  eax = 5554321; //  handle to new thread
-  esp += 6 * 4;
-
-HACKY_IMPORT_END()
-
-//Kernel32.lib
-HACKY_IMPORT_BEGIN(CreateEventA)
-  hacky_printf("lpEventAttributes 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("bManualReset 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("bInitialState 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpName 0x%" PRIX32 " ('%s')\n", stack[4], (char*)Memory(stack[4]));
-
-  eax = 5551337; // HANDLE
-  esp += 4 * 4;
-HACKY_IMPORT_END()
+  my_printf("=> 0x%" PRIX32 "\n", eax);
+HACKY_IMPORT_END2(6)
 
 //Kernel32.lib
-HACKY_IMPORT_BEGIN(SetEvent)
-  hacky_printf("hEvent 0x%" PRIX32 "\n", stack[1]);
+HACKY_IMPORT_BEGIN2(CreateEventA)
+  my_printf("CreateEventA ");
+  my_printf("lpEventAttributes:0x%" PRIX32 " ", stack[1]);
+  my_printf("bManualReset:0x%" PRIX32 " ", stack[2]);
+  my_printf("bInitialState:0x%" PRIX32 " ", stack[3]);
+  my_printf("lpName:0x%" PRIX32 " ('%s') ", stack[4], (char*)Memory(stack[4]));
+
+  eax = ++hevent_index; // HANDLE
+  my_printf("=> 0x%" PRIX32 "\n", eax);
+
+HACKY_IMPORT_END2(4)
+
+//Kernel32.lib
+HACKY_IMPORT_BEGIN2(SetEvent)
+  my_printf("SetEvent");
+  my_printf(" hEvent:0x%" PRIX32 "\n", stack[1]);
 
   eax = 1; //  succeeds = return value is nonzero
-  esp += 1 * 4;
-HACKY_IMPORT_END()
+HACKY_IMPORT_END2(1)
 
 //Kernel32.lib
-HACKY_IMPORT_BEGIN(WaitForSingleObject)
-  hacky_printf("hHandle 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwMilliseconds %" PRId32 "\n", stack[2]);
+HACKY_IMPORT_BEGIN2(WaitForSingleObject)
+  hacky_printf("WaitForSingleObject");
+  hacky_printf(" hHandle:0x%" PRIX32, stack[1]); // Event or Mutex or Thread
+  hacky_printf(" dwMilliseconds:%" PRId32 "\n", stack[2]);
 
   eax = 0; // DWORD (0 = "The state of the specified object is signaled.")
-  esp += 2 * 4;
-HACKY_IMPORT_END()
+HACKY_IMPORT_END2(2)
 
 //FIXME: Should be atomic by definition in OpenSWE1R?
 //Kernel32.lib
@@ -553,9 +550,11 @@ HACKY_IMPORT_BEGIN(InterlockedDecrement)
 HACKY_IMPORT_END()
 
 //Kernel32.lib
-HACKY_IMPORT_BEGIN(GetCurrentThread)
-  eax = 12345; // nonzero if succeeds
-HACKY_IMPORT_END()
+HACKY_IMPORT_BEGIN2(GetCurrentThreadId)
+  my_printf("GetCurrentThreadId");
+  eax = GetCurrentThreadContext()->id;
+  my_printf(" => 0x%" PRIX32 "\n", eax);
+HACKY_IMPORT_END2(0)
 
 //Kernel32.lib
 HACKY_IMPORT_BEGIN(SetThreadPriority)
@@ -580,14 +579,16 @@ HACKY_IMPORT_END()
 
 //Kernel32.lib
 HACKY_IMPORT_BEGIN(SuspendThread)
-  hacky_printf("hThread 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("hThread:0x%" PRIX32 "\n", stack[1]);
+
   eax = 0; // FIXME: Suspend count or -1 in case of error
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
 //Kernel32.lib
 HACKY_IMPORT_BEGIN(ResumeThread)
-  hacky_printf("hThread 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("hThread:0x%" PRIX32 "\n", stack[1]);
+
   eax = 0; // FIXME: Suspend count or -1 in case of error
   esp += 1 * 4;
 HACKY_IMPORT_END()
@@ -596,23 +597,29 @@ HACKY_IMPORT_END()
 HACKY_IMPORT_BEGIN(TerminateThread)
   hacky_printf("hThread 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("dwExitCode 0x%" PRIX32 "\n", stack[2]);
+
   //FIXME: This should exit the particular thread
+
   eax = 1; // BOOL; non-zero on success
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
 //Kernel32.lib
-HACKY_IMPORT_BEGIN(ExitThread)
-  hacky_printf("dwExitCode 0x%" PRIX32 "\n", stack[1]);
+HACKY_IMPORT_BEGIN2(ExitThread)
+  my_printf("ExitThread");
+  my_printf(" dwExitCode:0x%" PRIX32 "\n", stack[1]);
+
   info_printf("\n\n\n\n\nMASSIVE HACK! STARTING NOW!\n\n\n\n\n");
+
+  GetCurrentThreadContext()->active = false;
+  GetCurrentThreadContext()->running = false;
   SleepThread(0xFFFFFFFFFFFFFFFFLLU);
   // Spinlock this thread..
-  eip = Allocate(2);
-  uint8_t* code = Memory(eip);
-  code[0] = 0xEB; // a: jmp a
-  code[1] = 0xFE;
-  esp += 1 * 4;
-HACKY_IMPORT_END()
+  //eip = Allocate(2);
+  //uint8_t* code = Memory(eip);
+  //code[0] = 0xEB; // a: jmp a
+  //code[1] = 0xFE;
+HACKY_IMPORT_END2(1)
 
 // Console stuff
 //Kernel32.lib

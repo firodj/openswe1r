@@ -20,6 +20,10 @@
 #include "exe.h"
 #include "main.h"
 
+FILE* handles[10000];
+uint32_t handle_index = 1;
+uint32_t hevent_index = 0;
+
 //FIXME: These are hacks (register when mapping instead!)!
 extern Exe* exe;
 uint8_t* stack = NULL;
@@ -42,37 +46,10 @@ static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
 
 
-unsigned int currentThread = 0;
+unsigned int currentThread = -1;
 unsigned int threadCount = 0;
 
-typedef struct {
-  uint8_t raw[10];
-} X87Register;
-typedef struct {
-
-  uint64_t sleep;
-
-  // Standard stuff
-  uint32_t eip;
-  uint32_t esp;
-  uint32_t ebp;
-  uint32_t eax;
-  uint32_t ebx;
-  uint32_t ecx;
-  uint32_t edx;
-  uint32_t esi;
-  uint32_t edi;
-  uint32_t eflags;
-
-  // x87
-  uint16_t fpcw;
-  uint16_t fpsw;
-  uint16_t fptw;
-  X87Register fp[8];
-
-//FIXME: MMX?
-} ThreadContext;
-ThreadContext* threads = NULL; //FIXME: Store pointers to threads instead? (Probably doesn't matter for re-volt)
+static ThreadContext* threads = NULL; //FIXME: Store pointers to threads instead? (Probably doesn't matter for re-volt)
 
 static void TransferContext(ThreadContext* ctx, bool write) {
   enum uc_err(*transfer)(uc_engine*, uc_x86_reg, void*) = write ? uc_reg_write : uc_reg_read;
@@ -131,16 +108,20 @@ static void PrintContext(ThreadContext* ctx) {
 
 // Callback for tracing all kinds of memory errors
 static void UcErrorHook(uc_engine* uc, uc_mem_type type, uint64_t address, int size, int64_t value, void* user_data) {
-/*
-FIXME: type is one of 
-    UC_MEM_READ_UNMAPPED = 19,    // Unmapped memory is read from
-    UC_MEM_WRITE_UNMAPPED = 20,   // Unmapped memory is written to
-    UC_MEM_FETCH_UNMAPPED = 21,   // Unmapped memory is fetched
-    UC_MEM_WRITE_PROT = 22,  // Write to write protected, but mapped, memory
-    UC_MEM_READ_PROT = 23,   // Read from read protected, but mapped, memory
-    UC_MEM_FETCH_PROT = 24,  // Fetch from non-executable, but mapped, memory
-*/
-  info_printf("Unicorn-Engine error of type %d at 0x%" PRIx64 ", size = 0x%" PRIX32 "\n", type, address, size);
+  char *type_string = "";
+  switch (type) {
+      case UC_MEM_READ: type_string = "Memory is read from"; break;
+      case UC_MEM_WRITE: type_string = "Memory is written to"; break;
+      case UC_MEM_FETCH: type_string = "Memory is fetched"; break;
+      case UC_MEM_READ_UNMAPPED: type_string = "Unmapped memory is read from"; break;
+      case UC_MEM_WRITE_UNMAPPED: type_string = "Unmapped memory is written to"; break;
+      case UC_MEM_FETCH_UNMAPPED: type_string = "Unmapped memory is fetched"; break;
+      case UC_MEM_WRITE_PROT: type_string = "Write to write protected, but mapped, memory"; break;
+      case UC_MEM_READ_PROT: type_string = "Read from read protected, but mapped, memory"; break;
+      case UC_MEM_FETCH_PROT: type_string = "Fetch from non-executable, but mapped, memory"; break;
+      case UC_MEM_READ_AFTER: type_string = "Memory is read from (successful access)"; break;
+  };
+  sys_printf("Unicorn-Engine error of type %d %s at 0x%" PRIx64 ", size = 0x%" PRIX32 "\n", type, type_string, address, size);
   uc_emu_stop(uc);
 
   ThreadContext ctx;
@@ -149,12 +130,12 @@ FIXME: type is one of
 
   int eip;
   uc_reg_read(uc, UC_X86_REG_EIP, &eip);
-  info_printf("Emulation returned %X\n", eip);
+  sys_printf("Emulation returned %X\n", eip);
 
   int esp;
   uc_reg_read(uc, UC_X86_REG_ESP, &esp);
   for(int i = 0; i < 100; i++) {
-    info_printf("Stack [%d] = %X\n", i, *(uint32_t*)Memory(esp + i * 4));
+    sys_printf("Stack [%d] = %X\n", i, *(uint32_t*)Memory(esp + i * 4));
   }
 
   assert(false);
@@ -613,8 +594,45 @@ void SetProfiling(bool enabled) {
   }
 }
 
-unsigned int CreateEmulatedThread(uint32_t eip) {
+Address CreateThreadBegin()
+{
+    Address symAddress = 0;
+    Export* export = LookupExportByName("ExitThread");
+    if (export) {
+        if (export->address == 0) {
+            symAddress = CreateInt21();
+            AddHltHandler(symAddress, export->callback, export->name);
+            export->address = symAddress;
+        } else {
+            symAddress = export->address;
+        }
+    }
+    
+    Address thread_begin = Allocate(10);
+    uint8_t* code = Memory(thread_begin);
+    *code++ = 0xFF; // CALL
+    *code++ = 0xD0; //   EAX;
+    if (symAddress) {
+        *code++ = 0xB8; // MOV EAX,
+        *(uint32_t*)code = symAddress; code += sizeof(uint32_t);
+        *code++ = 0xFF; // CALL
+        *code++ = 0xD0; //   EAX;
+    }
+    *code++ = 0xF4; // HLT;
+    
+    return thread_begin;
+}
 
+unsigned int CreateEmulatedThread(uint32_t eip, bool suspended) {
+  static Address thread_begin = 0;
+  if (thread_begin == 0) thread_begin = CreateThreadBegin();
+  static int threadId = 0;
+    
+  threadId++;
+  threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
+  ThreadContext* ctx = &threads[threadCount - 1];
+  ctx->id = threadId;
+    
   //FIXME: Dirty hack!
   // Map and set stack
   //FIXME: Use requested size
@@ -622,29 +640,33 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
     stack = aligned_malloc(ucAlignment, stackSize);
     MapMemory(stack, stackAddress, stackSize, true, true, false);
   }
-  static int threadId = 0;
-  uint32_t esp = stackAddress + stackSize / 2 + 256 * 1024 * threadId++; // 256 kiB per late thread
+    
+  uint32_t esp = stackAddress + stackSize / 2 + 256 * 1024 * threadId; // 256 kiB per late thread
   assert(threadId < 4);
-
-  threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
-  ThreadContext* ctx = &threads[threadCount - 1];
-  TransferContext(ctx, false); //FIXME: Find safe defaults instead?!
-  ctx->eip = eip;
+  
+  TransferContext(ctx, false /* read */); //FIXME: Find safe defaults instead?!
+  ctx->eip = thread_begin;
+  ctx->eax = eip;
   ctx->esp = esp;
   ctx->ebp = 0;
   ctx->sleep = 0;
+  ctx->active = true;
+  ctx->running = !suspended;
+    
   PrintContext(ctx);
 
-  return 0;
+  return ctx->id;
 }
 
 void SleepThread(uint64_t duration) {
-  threads[currentThread].sleep = duration;
-  uc_emu_stop(uc);
+  GetCurrentThreadContext()->sleep = duration;
+  // FIXME: multi-thread uc?
+  //uc_emu_stop(uc);
 }
 
 void DeleteEmulatedThread() {
   //FIXME: How to deal with deletion of the running thread?
+  GetCurrentThreadContext()->active = false;
 }
 
 static unsigned int GetThreadCount() {
@@ -652,18 +674,31 @@ static unsigned int GetThreadCount() {
   return threadCount;
 }
 
+ThreadContext *GetCurrentThreadContext() {
+    return &threads[currentThread];
+}
+
 void RunEmulation() {
   uc_err err;
 
   //FIXME: plenty of options to optimize in single threaded mode.. (register readback not necessary etc.)
+  int runningThreads = 0;
   while(GetThreadCount() > 0) {
 
     // Very simple round robin schedule.. Re-Volt only uses threads during load screens anyway..
     currentThread++;
-    currentThread %= threadCount;
+    if (currentThread >= threadCount) {
+      if (runningThreads == 0) break;
+      currentThread = 0;
+      runningThreads = 0;
+    }
 
     // Get current thread
     ThreadContext* ctx = &threads[currentThread];
+    
+    if (!ctx->active) continue;
+    if (!ctx->running) continue;
+    runningThreads++;
 
     //FIXME: Decrement time by time slice instead..
     if (ctx->sleep > 0) {
@@ -672,10 +707,11 @@ void RunEmulation() {
       continue;
     }
 
-    TransferContext(ctx, true);
+    TransferContext(ctx, true /* write */);
 
-    while(true) {
-      err = uc_emu_start(uc, ctx->eip, 0, 0, 0);
+    uint32_t lastTime = SDL_GetTicks();
+    while(ctx->active && ctx->running) {
+      err = uc_emu_start(uc, ctx->eip, 0, 0, 1000000);
 
       // Finish profiling, if we have partial data
       if (heat_address != 0) {
@@ -694,35 +730,43 @@ void RunEmulation() {
         break;
       }
 
+      uint32_t currentTime = SDL_GetTicks();
+    
       uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
 
       Address hltAddress = ctx->eip - 1;
-      assert(*(uint8_t*)Memory(hltAddress) == 0xF4);
+    
+      if (*(uint8_t*)Memory(hltAddress) == 0xF4) {
+          HltHandler* hltHandler = findHltHandler(hltAddress);
+          if(hltHandler != NULL) {
+            hltHandler->callback(uc, hltHandler->address, hltHandler->user_data);
+          }
 
-      HltHandler* hltHandler = findHltHandler(hltAddress);
-      if(hltHandler != NULL) {
-        hltHandler->callback(uc, hltHandler->address, hltHandler->user_data);
+          //Hack: Manually transfers EIP (might have been changed in callback)
+          uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
       }
-
-      //Hack: Manually transfers EIP (might have been changed in callback)
-      uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
+      
+      if (currentTime > lastTime + 333) {
+        //sys_printf("<%d> Timeout EIP = 0x%x, ticks = %d\n", ctx->id, ctx->eip, currentTime - lastTime);
+        break; // Context switch after several ticks (ms)
+      }
     }
 
     // threads array might be relocated if a thread was modified in a callback; update ctx pointer
     ctx = &threads[currentThread];
 
-    TransferContext(ctx, false);
+    TransferContext(ctx, false /* read */);
 
     if (err != 0) {
-      info_printf("Failed on uc_emu_start() with error returned %u: %s\n", err, uc_strerror(err));
+      sys_printf("Failed on uc_emu_start() with error returned %u: %s\n", err, uc_strerror(err));
       PrintContext(ctx);
       assert(false);
     }
 
-    info_printf("\n\n\n\n\nEmulation slice completed for thread %d (Count: %d) with %d at 0x%X\n", currentThread, threadCount, err, ctx->eip);
+    //sys_printf("\n\n\Emulation slice completed for thread %d (Count: %d) with %d at 0x%X\n", currentThread, threadCount, err, ctx->eip);
 
-    PrintContext(ctx);
-    info_printf("\n\n\n\n\n");
+    //PrintContext(ctx);
+    //info_printf("\n\n\n\n\n");
   }
 }
 

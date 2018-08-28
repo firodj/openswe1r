@@ -13,6 +13,7 @@ typedef struct {
     const char* name;
     void(*callback)(void*, Address, void*);
     Address address;
+    Address thunkAddress;
     int hook; // hook type, 1:HLT, 2:INT
 } Export;
 
@@ -23,11 +24,6 @@ extern const char** dirlisting;
 extern Address clearEax;
 
 extern uint32_t tls[];
-
-extern FILE* handles[];
-extern uint32_t handle_index;
-
-
 
 static inline int LogPrintf(const char* fmt, ...) {
 #if 1
@@ -144,7 +140,6 @@ char* TranslatePath(const char* path);
        stack[0] = returnAddress; \
     } \
     uc_reg_write(uc, UC_X86_REG_EAX, &eax); \
-    return nargs; \
   }
 
 #endif
