@@ -43,7 +43,7 @@ static inline int LogSilent(const char* fmt, ...) { return 0;
 #define sys_printf LogPrintf
 #define my_printf LogPrintf
 
-Address CreateInterface(const char* name, unsigned int slotCount);
+Address CreateInterface(const char* name, unsigned int slotCount, uint32_t objectSize);
 void AddExport(const char* name, void* callback, Address address);
 void AddExport2(const char* name, void* callback);
 Export* LookupExportByName(const char* name);

@@ -37,12 +37,18 @@ typedef struct {
   ALuint al_buffer;
   API(WAVEFORMATEX) fmt;
   Address data;
+  uint32_t size_data;
   uint32_t type;
 } A3DSOURCE;
 
 // Play options
 #define A3D_SINGLE    0
 #define A3D_LOOPED    1
+
+#define A3DSTATUS_PLAYING           0x00000001
+#define A3DSTATUS_BUFFERLOST        0x00000002
+#define A3DSTATUS_LOOPING           0x00000004
+#define A3DSTATUS_WAITING_FOR_FLUSH 0x00001000
 
 #if 0
 DECLARE_INTERFACE_(IA3d4, IUnknown)
@@ -231,7 +237,7 @@ HACKY_COM_BEGIN(IA3d4, 0)
     assert(false);
   }
   
-  *(Address*)Memory(stack[3]) = CreateInterface(name, 200);
+  *(Address*)Memory(stack[3]) = CreateInterface(name, 200, 100);
 
   eax = 0;
   esp += 3 * 4;
@@ -292,12 +298,14 @@ HACKY_COM_BEGIN(IA3d4, 17)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
 
-  Address addr = CreateInterface("IA3dSource", 200);
+  Address addr = CreateInterface("IA3dSource", 200, sizeof(A3DSOURCE));
   
   A3DSOURCE* source = Memory(addr);
   alGenSources(1, &source->al_source);
   alGenBuffers(1, &source->al_buffer);
   source->type = stack[2];
+  source->size_data = 0;
+  source->data = 0;
 
   //FIXME: Move these to proper functions, unless we need defaults
 
@@ -312,6 +320,29 @@ HACKY_COM_BEGIN(IA3d4, 17)
   alSourcei(source->al_source, AL_LOOPING, AL_FALSE);
 
   *(Address*)Memory(stack[3]) = addr;  
+
+  eax = 0;
+  esp += 3 * 4;
+HACKY_COM_END()
+
+// IA3d4 -> STDMETHOD(DuplicateSource)                (THIS_ LPA3DSOURCE, LPA3DSOURCE *) PURE; // 18
+HACKY_COM_BEGIN(IA3d4, 18)
+  hacky_printf("DuplicateSource\n");
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("pOriginal 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("ppCopy 0x%" PRIX32 "\n", stack[3]);
+
+  A3DSOURCE* source = Memory(stack[2]);
+  Address addr = CreateInterface("IA3dSource", 200, sizeof(A3DSOURCE));
+  A3DSOURCE* dest = Memory(addr);
+  alGenSources(1, &dest->al_source);
+  alGenBuffers(1, &dest->al_buffer);
+  dest->type = source->type;
+  dest->fmt = source->fmt;
+
+  //FIXME: should wave data also duplicated?
+  dest->data = 0;
+  dest->size_data = 0;
 
   eax = 0;
   esp += 3 * 4;
@@ -415,7 +446,8 @@ HACKY_COM_BEGIN(IA3dSource, 5)
 
   // a = size?
   A3DSOURCE* this = Memory(stack[1]);
-  this->data = Allocate(stack[2]);
+  this->size_data = stack[2];
+  this->data = Allocate(this->size_data);
 
   eax = 0;
   esp += 2 * 4;
@@ -583,7 +615,7 @@ HACKY_COM_BEGIN(IA3dSource, 19)
 
     A3DSOURCE* this = Memory(stack[1]);
     ALint pos;
-    alGetSourcei(this->al_source, AL_SAMPLE_OFFSET, &pos);
+    alGetSourcei(this->al_source, AL_BYTE_OFFSET, &pos);
     //sys_printf("IA3dSource GetWavePosition = %d\n", pos);
     *(uint32_t*)Memory(stack[2]) = pos;
 
@@ -628,9 +660,9 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IA3dSource, 40)
   hacky_printf("SetGain\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("fGain 0x%" PRIX32 "\n", stack[2]);
 
-  float fval = *(float*)stack[2];
+  float fval = *(float*)&stack[2];
   A3DSOURCE* this = Memory(stack[1]);
   alSourcef(this->al_source, AL_GAIN, fval);
 
@@ -642,7 +674,12 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IA3dSource, 42)
   hacky_printf("SetPitch\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("fPitch 0x%" PRIX32 "\n", stack[2]);
+
+  float fval = *(float*)&stack[2];
+  A3DSOURCE* this = Memory(stack[1]);
+  alSourcef(this->al_source, AL_PITCH, fval);
+
   eax = 0;
   esp += 2 * 4;
 HACKY_COM_END()
@@ -681,9 +718,17 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IA3dSource, 56)
   hacky_printf("GetStatus\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("dwStatus 0x%" PRIX32 "\n", stack[2]);
 
-  *(uint32_t*)Memory(stack[2]) = 0;
+  uint32_t dwStatus = 0;
+  A3DSOURCE* this = Memory(stack[1]);
+  ALint status;
+  alGetSourcei(this->al_source, AL_SOURCE_STATE, &status);
+  if (status == AL_PLAYING) dwStatus |= A3DSTATUS_PLAYING;
+  alGetSourcei(this->al_source, AL_LOOPING, &status);
+  if (status == AL_TRUE) dwStatus |= A3DSTATUS_LOOPING;
+
+  *(uint32_t*)Memory(stack[2]) = dwStatus;
 
   eax = 0;
   esp += 2 * 4;
@@ -693,8 +738,9 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IA3dSource, 57)
   hacky_printf("SetPanValues\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("nChannels 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("fGains 0x%" PRIX32 "\n", stack[3]);
+
   eax = 0;
   esp += 3 * 4;
 HACKY_COM_END()

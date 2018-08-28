@@ -95,7 +95,7 @@ HACKY_IMPORT_BEGIN(DirectInputCreateA)
   hacky_printf("lplpDirectInput 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("punkOuter 0x%" PRIX32 "\n", stack[4]);
   //FIXME: Unsure about most terminology / inner workings here
-  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputA", 200);
+  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputA", 200, 100);
   eax = 0; // HRESULT -> non-negative means success
   esp += 4 * 4;
 HACKY_IMPORT_END()
@@ -118,7 +118,7 @@ HACKY_COM_BEGIN(IDirectInputA, 3)
   hacky_printf("rguid 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("lpIDD 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[4]);
-  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 200);
+  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 200, 100);
   eax = 0; // HRESULT -> non-negative means success
   esp += 4 * 4;
 HACKY_COM_END()

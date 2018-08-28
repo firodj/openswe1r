@@ -98,9 +98,9 @@ uint32_t tls[1000] = {0};
 static void UnknownImport(void* uc, Address address, void* user_data);
 
 
-Address CreateInterface(const char* name, unsigned int slotCount) {
+Address CreateInterface(const char* name, unsigned int slotCount, uint32_t objectSize) {
   //FIXME: Unsure about most terminology / inner workings here
-  Address interfaceAddress = Allocate(100); //FIXME: Size of object
+  Address interfaceAddress = Allocate(objectSize);
   Address vtableAddress = Allocate(4 * slotCount);
   uint32_t* vtable = (uint32_t*)Memory(vtableAddress);
   for(unsigned int i = 0; i < slotCount; i++) {
@@ -658,7 +658,7 @@ HACKY_IMPORT_BEGIN(CoCreateInstance)
   } else {
     assert(false);
   }
-  *(Address*)Memory(stack[5]) = CreateInterface(name, 200);
+  *(Address*)Memory(stack[5]) = CreateInterface(name, 200, 100);
   comIndex++;
   eax = 0; // S_OK
   esp += 5 * 4;
@@ -669,7 +669,7 @@ HACKY_IMPORT_BEGIN(DirectDrawCreate)
   hacky_printf("lpGUID 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lplpDD 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[3]);
-  *(Address*)Memory(stack[2]) = CreateInterface("IDirectDraw4", 200);
+  *(Address*)Memory(stack[2]) = CreateInterface("IDirectDraw4", 200, 100);
   eax = 0; // DD_OK
   esp += 3 * 4;
 HACKY_IMPORT_END()
@@ -1175,7 +1175,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 0)
     assert(false);
   }
 
-  *(Address*)Memory(stack[3]) = CreateInterface(name, 200);
+  *(Address*)Memory(stack[3]) = CreateInterface(name, 200, 100);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
@@ -1194,7 +1194,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 5)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-  *(Address*)Memory(stack[4]) = CreateInterface("IDirectDrawPalette", 200);
+  *(Address*)Memory(stack[4]) = CreateInterface("IDirectDrawPalette", 200, 100);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
 HACKY_COM_END()
@@ -1206,7 +1206,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 6)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
 
-  Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50);
+  Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50, 100);
   API(DirectDrawSurface4)* surface = (API(DirectDrawSurface4)*)Memory(surfaceAddress);
 
   *(Address*)Memory(stack[3]) = surfaceAddress;
@@ -1240,14 +1240,14 @@ enum {
 
   if (desc->ddsCaps.dwCaps & API(DDSCAPS_TEXTURE)) {
     // FIXME: Delay this until the interface is queried the first time?!
-    surface->texture = CreateInterface("IDirect3DTexture2", 20);
+    surface->texture = CreateInterface("IDirect3DTexture2", 20, 100);
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(surface->texture);
     texture->surface = surfaceAddress;
     glGenTextures(1, &texture->handle);
     info_printf("GL handle is %d\n", texture->handle);
   } else {
     //FIXME: only added to catch bugs, null pointer should work
-    surface->texture = CreateInterface("invalid", 200);
+    surface->texture = CreateInterface("invalid", 200, 100);
 
     //FIXME: WTF is this shit?!
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(surface->texture);
@@ -1543,7 +1543,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 12)
     *(Address*)Memory(stack[3]) = stack[1];
   } else {
     info_printf("Creating new dummy surface\n");
-    Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50);
+    Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50, 100);
     API(DirectDrawSurface4)* surface = (API(DirectDrawSurface4)*)Memory(surfaceAddress);
     memset(&surface->desc, 0x00, sizeof(surface->desc));
 
@@ -1844,7 +1844,7 @@ HACKY_COM_BEGIN(IDirect3D3, 6)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  *(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 200);
+  *(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 200, 100);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
@@ -1856,7 +1856,7 @@ HACKY_COM_BEGIN(IDirect3D3, 8)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-  *(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 200);
+  *(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 200, 100);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
 HACKY_COM_END()
