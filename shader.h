@@ -7,7 +7,7 @@
 
 #include <stdbool.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 void PrintShaderLog(GLuint shader);
 void PrintShaderProgramLog(GLuint program);

@@ -711,7 +711,7 @@ void RunEmulation() {
 
     uint32_t lastTime = SDL_GetTicks();
     while(ctx->active && ctx->running) {
-      err = uc_emu_start(uc, ctx->eip, 0, 0, 1000000);
+      err = uc_emu_start(uc, ctx->eip, 0, 0, 3000000);
 
       // Finish profiling, if we have partial data
       if (heat_address != 0) {
@@ -747,7 +747,7 @@ void RunEmulation() {
       }
       
       if (currentTime > lastTime + 333) {
-        //sys_printf("<%d> Timeout EIP = 0x%x, ticks = %d\n", ctx->id, ctx->eip, currentTime - lastTime);
+        sys_printf("<%d> Timeout EIP = 0x%x, ticks = %d\n", ctx->id, ctx->eip, currentTime - lastTime);
         break; // Context switch after several ticks (ms)
       }
     }

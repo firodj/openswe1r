@@ -24,7 +24,7 @@
 #include "SDL.h"
 static SDL_Window* sdlWindow;
 
-#include <GL/glew.h>
+#include "glad/glad.h"
 
 #include "com/d3d.h"
 #include "com/ddraw.h"
@@ -3150,7 +3150,7 @@ int main(int argc, char* argv[]) {
   sys_printf("-- Initializing\n");
   InitializeEmulation();
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
-		  sys_printf("Failed to initialize SDL2!\n");
+    sys_printf("Failed to initialize SDL2!\n");
   }
   sys_printf("-- Creating window\n");
   {
@@ -3159,30 +3159,27 @@ int main(int argc, char* argv[]) {
     int h = 480;
 
   	Uint32 style = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
-	  if (fullscreen) {
-		  style |= SDL_WINDOW_FULLSCREEN;
+    if (fullscreen) {
+      style |= SDL_WINDOW_FULLSCREEN;
     }
 
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-	  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-	  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
     sdlWindow = SDL_CreateWindow("OpenSWE1R", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, style);
-	  assert(sdlWindow != NULL);
+    assert(sdlWindow != NULL);
 
-	  SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
-	  assert(glcontext != NULL);
+    SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
+    assert(glcontext != NULL);
 
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-      sys_printf("Error: %s\n", glewGetErrorString(err));
-      return 1;
-    }
-
+    gladLoadGLLoader(SDL_GL_GetProcAddress);
+    sys_printf("Vendor:   %s\n", glGetString(GL_VENDOR));
+    sys_printf("Renderer: %s\n", glGetString(GL_RENDERER));
+    sys_printf("Version:  %s\n", glGetString(GL_VERSION));
 
     //FIXME: This is ugly but gets the job done.. for now
     static GLuint vao = 0;
@@ -3194,8 +3191,7 @@ int main(int argc, char* argv[]) {
 
     glDisable(GL_CULL_FACE);
 //    glDepthFunc(GL_GEQUAL);
-    glCullFace(GL_FRONT);    
-
+    glCullFace(GL_FRONT);
 
   	SDL_ShowWindow(sdlWindow);
   }

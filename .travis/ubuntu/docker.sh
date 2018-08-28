@@ -3,7 +3,7 @@
 cd /openswe1r
 
 apt-get update
-apt-get install -y build-essential libsdl2-dev libopenal-dev libenet-dev libglew-dev wget git
+apt-get install -y build-essential libsdl2-dev libopenal-dev libenet-dev wget git
 
 # Get a recent version of CMake
 wget -nv https://cmake.org/files/v3.9/cmake-3.9.0-Linux-x86_64.sh

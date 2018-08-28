@@ -439,10 +439,10 @@ HACKY_COM_BEGIN(IA3dSource, 2)
 HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(AllocateWaveData)			(THIS_ INT) PURE; // 5
-HACKY_COM_BEGIN(IA3dSource, 5)
-  hacky_printf("AllocateWaveData\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+HACKY_COM_BEGIN2(IA3dSource, 5)
+  sys_printf("IA3dSource::AllocateWaveData");
+  sys_printf(" this:0x%" PRIX32, stack[1]);
+  sys_printf(" nSize:0x%" PRIX32 "\n", stack[2]);
 
   // a = size?
   A3DSOURCE* this = Memory(stack[1]);
@@ -450,8 +450,8 @@ HACKY_COM_BEGIN(IA3dSource, 5)
   this->data = Allocate(this->size_data);
 
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+  //esp += 2 * 4;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(SetWaveFormat)			(THIS_ LPVOID) PURE; // 7
 HACKY_COM_BEGIN(IA3dSource, 7)

@@ -142,4 +142,7 @@ char* TranslatePath(const char* path);
     uc_reg_write(uc, UC_X86_REG_EAX, &eax); \
   }
 
+#define HACKY_COM_BEGIN2(interface, slot) HACKY_IMPORT_BEGIN2(interface ## __ ## slot)
+#define HACKY_COM_END2(nargs) HACKY_IMPORT_END2(nargs)
+
 #endif

@@ -1,4 +1,4 @@
 #!/bin/sh -ex
 
 brew update
-brew install sdl2 unicorn glew openal-soft enet 
+brew install sdl2 unicorn openal-soft enet 
