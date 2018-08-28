@@ -32,11 +32,8 @@ static SDL_Window* sdlWindow;
 
 uint32_t callId = 0;
 
-typedef struct {
-  const char* name;
-  void(*callback)(void*, Address, void*);
-  Address address;
-} Export;
+FILE* handles[10000];
+uint32_t handle_index = 1;
 
 unsigned int exportCount = 0;
 Export* exports = NULL;
@@ -47,10 +44,21 @@ void AddExport(const char* name, void* callback, Address address) {
   export->name = malloc(strlen(name) + 1);
   strcpy((char*)export->name, name);
   export->callback = callback;
-  export->address = 0;
+  export->address = address;
+  export->hook = 1;
   exportCount++;
 }
 
+void AddExport2(const char* name, void* callback) {
+  exports = realloc(exports, (exportCount + 1) * sizeof(Export));
+  Export* export = &exports[exportCount];
+  export->name = malloc(strlen(name) + 1);
+  strcpy((char*)export->name, name);
+  export->callback = callback;
+  export->address = 0;
+  export->hook = 2;
+  exportCount++;
+}
 
 Export* LookupExportByName(const char* name) {
   for(unsigned int i = 0; i < exportCount; i++) {
@@ -72,8 +80,6 @@ Export* LookupExportByOrdinal(const char* name, uint32_t ordinal) {
 }
 
 // HACK BLOCK!
-#if 1 
-
 
 const char** dirlisting = NULL;
 
@@ -124,18 +130,10 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
   return interfaceAddress;
 }
 
-
-#endif
-
-
-
-
-
-
 Exe* exe; //FIXME: This is hack. I feel this shouldn't be exposed aside from the loader
 const char* exeName = "swep1rcr.exe";
 
-static char* TranslatePath(const char* path) {
+char* TranslatePath(const char* path) {
   size_t length = strlen(path) + 1;
   char* newPath = malloc(length);
   char* cursor = strcpy(newPath, path);
@@ -170,13 +168,19 @@ static char* TranslatePath(const char* path) {
     return newPath;
   }
 
+  if ((length >= 10) && !memcmp(newPath, "d:/./data/", 10)) {
+    memcpy(newPath, "./data/", 7);
+    memmove(&newPath[7], &newPath[10], length - 10);
+    return newPath;
+  }
+
   return newPath;
 }
 
 void StackTrace(uint32_t base, unsigned int frames, unsigned int arguments) {
   uint32_t stackAddress = base;
   for(unsigned int i = 0; i < frames; i++) {
-    printf("Base: 0x%" PRIX32 "\n", stackAddress);
+    info_printf("Base: 0x%" PRIX32 "\n", stackAddress);
     if (stackAddress == 0) {
       // End of stack trace!
       return;
@@ -186,14 +190,14 @@ void StackTrace(uint32_t base, unsigned int frames, unsigned int arguments) {
     // stack[1] = Return address
     // stack[2..] = Arguments
     if (stack == NULL) {
-      printf("Corrupt base in trace!\n");
+      info_printf("Corrupt base in trace!\n");
       return;
     }
-    printf("#%2d Returns to 0x%" PRIX32 " (", i, stack[1]);
+    info_printf("#%2d Returns to 0x%" PRIX32 " (", i, stack[1]);
     for(unsigned int j = 0; j < arguments; j++) {
-      printf("@%d=0x%08" PRIX32 ", ", j, stack[j + 2]);
+      info_printf("@%d=0x%08" PRIX32 ", ", j, stack[j + 2]);
     }
-    printf("...)\n");
+    info_printf("...)\n");
     // Get the previous ebp
     stackAddress = stack[0];
   }
@@ -247,12 +251,12 @@ void UnloadSection(Exe* exe, unsigned int sectionIndex) {
 
 
 static void UcTimerHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
-  printf("Time is %" PRIu64 "\n", SDL_GetTicks());
+  info_printf("Time is %" PRIu64 "\n", SDL_GetTicks());
 }
 
 // This is strictly for debug purposes, it attempts to dump fscanf (internally used by sscanf too)
 static void UcFscanfHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
-  printf("\nfscanf\n\n");
+  info_printf("\nfscanf\n\n");
 
   int eip;
   uc_reg_read(uc, UC_X86_REG_EIP, &eip);
@@ -279,12 +283,12 @@ static void UcFscanfHook(void* uc, uint64_t address, uint32_t size, void* user_d
 
   // Pop the return address
   Address returnAddress = stack[0];
-  printf("Return at 0x%" PRIX32 "\n", returnAddress);
+  info_printf("Return at 0x%" PRIX32 "\n", returnAddress);
   _iobuf* iob = Memory(stack[1]); // Get FILE object
   char* buf = Memory(iob->_ptr);
-  printf("stream: 0x%" PRIX32 " ('%.100s...')\n", stack[1], buf);
+  info_printf("stream: 0x%" PRIX32 " ('%.100s...')\n", stack[1], buf);
   char* fmt = (char*)Memory(stack[2]);
-  printf("fmt: 0x%" PRIX32 " ('%s')\n", stack[2], fmt);
+  info_printf("fmt: 0x%" PRIX32 " ('%s')\n", stack[2], fmt);
 
   // We'll let MS code handle buffer loads
   if (buf == NULL) {
@@ -352,17 +356,17 @@ static void PrintVertices(unsigned int vertexFormat, Address address, unsigned i
   uint32_t* p = (uint32_t*)Memory(address);
   for(unsigned int i = 0; i < count; i++) {
     float* f = (float*)p;
-    printf("  %d.    %f %f %f %f 0x%08" PRIX32 " 0x%08" PRIX32, i, f[0], f[1], f[2], f[3], p[4], p[5]);
+    info_printf("  %d.    %f %f %f %f 0x%08" PRIX32 " 0x%08" PRIX32, i, f[0], f[1], f[2], f[3], p[4], p[5]);
     p += 6;
     if (texCount >= 1) {
-      printf(" %f %f", f[6], f[7]);
+      info_printf(" %f %f", f[6], f[7]);
       p += 2;
     }
     if (texCount >= 2) {
-      printf(" %f %f", f[8], f[9]);
+      info_printf(" %f %f", f[8], f[9]);
       p += 2;
     }
-    printf("\n");
+    info_printf("\n");
   }
 }
 
@@ -477,251 +481,9 @@ static GLenum SetupRenderer(unsigned int primitiveType, unsigned int vertexForma
 }
 
 
-
-// CRT-Startup / pre-WinMain:
-
-HACKY_IMPORT_BEGIN(GetVersion)
-  hacky_printf("(No parameters)\n");
-  eax = 0x00010A04;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(HeapCreate)
-  hacky_printf("flOptions 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwInitialSize 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("dwMaximumSize 0x%" PRIX32 "\n", stack[3]);
-  eax = 0x555;
-  esp += 3 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(HeapAlloc)
-  hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("dwBytes 0x%" PRIX32 "\n", stack[3]);
-  eax = Allocate(stack[3]);
-  //FIXME: Only do this if flag is set..
-  memset(Memory(eax), 0x00, stack[3]);
-  esp += 3 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(InitializeCriticalSection)
-  hacky_printf("lpCriticalSection 0x%" PRIX32 "\n", stack[1]);
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(TlsAlloc)
-  static int tlsIndex = 0;
-  assert(tlsIndex < 500);
-  eax = tlsIndex++; // TLS Index
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(EnterCriticalSection)
-  // Heavily impacts performance!
-#if 1
-  hacky_printf("lpCriticalSection 0x%" PRIX32 "\n", stack[1]);
-#else
-  silent = true;
-#endif
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(LeaveCriticalSection)
-  // Heavily impacts performance!
-#if 1
-  hacky_printf("lpCriticalSection 0x%" PRIX32 "\n", stack[1]);
-#else
-  silent = true;
-#endif
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(VirtualAlloc)
-  hacky_printf("lpAddress 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwSize 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("flAllocationType 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("flProtect 0x%" PRIX32 "\n", stack[4]);
-  eax = Allocate(stack[2]);
-  memset(Memory(eax), 0x00, stack[2]);
-  esp += 4 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(TlsSetValue)
-  hacky_printf("dwTlsIndex 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpTlsValue 0x%" PRIX32 "\n", stack[2]);
-  tls[stack[1]] = stack[2];
-  eax = 1; // nonzero if succeeds
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetCurrentThreadId)
-  eax = 666; // nonzero if succeeds
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetACP)
-  eax = 777; // nonzero if succeeds
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetModuleFileNameA)
-  hacky_printf("hModule 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpFilename 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("nSize 0x%" PRIX32 "\n", stack[3]);
-  const char* path = "XYZ";
-  assert(stack[3] >= (strlen(path) + 1));
-  eax = sprintf((char*)Memory(stack[2]), "%s", path); // number of chars written
-  esp += 3 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetCPInfo)
-  hacky_printf("CodePage 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpCPInfo 0x%" PRIX32 "\n", stack[2]);
-  eax = 1; // Returns 1 if successful, or 0 otherwise.
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetStartupInfoA)
-  hacky_printf("lpStartupInfo 0x%" PRIX32 "\n", stack[1]);
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetStdHandle)
-  hacky_printf("nStdHandle 0x%" PRIX32 "\n", stack[1]);
-  eax = 888;
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetFileType)
-  hacky_printf("hFile 0x%" PRIX32 "\n", stack[1]);
-  //eax = 2; // FILE_TYPE_CHAR
-  eax = 1; // FILE_TYPE_DISK
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SetHandleCount)
-  hacky_printf("uNumber 0x%" PRIX32 "\n", stack[1]);
-  eax = stack[1];
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetCommandLineA)
-  const char* cmd = "swep1rcr.exe";
-  Address tmp = Allocate(strlen(cmd) + 1);
-  strcpy((char*)Memory(tmp), cmd);
-  eax = tmp;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetEnvironmentStringsW)
-  Address tmp = Allocate(4);
-  ((char*)Memory(tmp))[0] = '\0';
-  ((char*)Memory(tmp))[1] = '\0';
-  ((char*)Memory(tmp))[2] = '\0';
-  ((char*)Memory(tmp))[3] = '\0';
-  eax = tmp;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(WideCharToMultiByte)
-  hacky_printf("CodePage 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpWideCharStr 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("cchWideChar 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("lpMultiByteStr 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("cbMultiByte 0x%" PRIX32 "\n", stack[6]);
-  hacky_printf("lpDefaultChar 0x%" PRIX32 "\n", stack[7]);
-  hacky_printf("lpUsedDefaultChar 0x%" PRIX32 "\n", stack[8]);
-  eax = 1; //FIXME: Number of chars written
-  esp += 8 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(MultiByteToWideChar)
-  hacky_printf("CodePage 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpMultiByteStr 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("cbMultiByte 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("lpWideCharStr 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("cchWideChar 0x%" PRIX32 "\n", stack[6]);
-//FIXME: MOVE SYMBOLS?!
-  eax = 0; //FIXME: Number of chars written
-  esp += 6 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(LCMapStringW)
-  hacky_printf("Locale 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwMapFlags 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpSrcStr 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("cchSrc 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("lpDestStr 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("cchDest 0x%" PRIX32 "\n", stack[6]);
-//FIXME: MOVE SYMBOLS?!
-  eax = 1 + 1; //FIXME: Number of chars in translated string including zero term
-  esp += 6 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetModuleHandleA)
-  hacky_printf("lpModuleName 0x%" PRIX32 " ('%s')\n", stack[1], Memory(stack[1]));
-  eax = 999;
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetProcAddress)
-  Address lpProcName = stack[2];
-  const char* procName = Memory(lpProcName);
-  hacky_printf("hModule 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpProcName 0x%" PRIX32 " ('%s')\n", lpProcName, procName);
-
-  Export* export = LookupExportByName(procName);
-  if (export == NULL) {
-    printf("Export for '%s' could not be found\n", procName);
-    eax = 0;
-    assert(false);
-  } else {
-    //FIXME: Use existing address for export
-    Address hltAddress = CreateHlt();
-    AddHltHandler(hltAddress, export->callback, (void*)procName);
-    eax = hltAddress;
-    printf("Providing at 0x%08X\n", hltAddress);
-  }
-
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-// This one is retrieved using GetProcAddress!
-HACKY_IMPORT_BEGIN(IsProcessorFeaturePresent)
-  hacky_printf("ProcessorFeature 0x%" PRIX32 "\n", stack[1]);
-  eax = 0; // Feature not supported = zero; else nonzero
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SetUnhandledExceptionFilter)
-  // (Only used in 1207 revolt.exe CRT)
-  hacky_printf("lpTopLevelExceptionFilter 0x%" PRIX32 "\n", stack[1]);
-  eax = 0; // Previous handler (NULL = none existed)
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(QueryPerformanceCounter)
-  hacky_printf("lpPerformanceCount 0x%" PRIX32 "\n", stack[1]);
-  *(uint64_t*)Memory(stack[1]) = SDL_GetPerformanceCounter();
-  eax = 1; // nonzero if succeeds
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(FreeEnvironmentStringsW)
-  hacky_printf("lpszEnvironmentBlock 0x%" PRIX32 "\n", stack[1]);
-  eax = 1; // nonzero if succeeds
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetStringTypeW)
-  hacky_printf("dwInfoType 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpSrcStr 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("cchSrc 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpCharType 0x%" PRIX32 "\n", stack[4]);
-  eax = 1; // nonzero if succeeds
-  esp += 4 * 4;
-HACKY_IMPORT_END()
-
-
-
 // Actual revolt.exe starts here, anything until this point was CRT-Startup / pre-WinMain:
 
+//User32.lib
 HACKY_IMPORT_BEGIN(GetCursorPos)
   hacky_printf("lpPoint 0x%" PRIX32 "\n", stack[1]);
   int32_t* point = (int32_t*)Memory(stack[1]);
@@ -734,6 +496,7 @@ HACKY_IMPORT_BEGIN(GetCursorPos)
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(SetCursorPos)
   hacky_printf("x %" PRIu32 "\n", stack[1]);
   hacky_printf("y %" PRIu32 "\n", stack[2]);
@@ -741,6 +504,7 @@ HACKY_IMPORT_BEGIN(SetCursorPos)
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(GetKeyNameTextA)
   hacky_printf("lParam 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpString 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -749,67 +513,17 @@ HACKY_IMPORT_BEGIN(GetKeyNameTextA)
   esp += 3 * 4;
 HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(GetComputerNameA)
-  hacky_printf("lpBuffer 0x%" PRIX32 "\n", stack[1]);
-  uint32_t* size = (uint32_t*)Memory(stack[2]);
-  hacky_printf("lpnSize 0x%" PRIX32 " (%" PRIu32 ")\n", stack[2], *size);
-  *size = snprintf(Memory(stack[1]), *size, "ComputerName"); // Cancel was selected
-  eax = 1; // nonzero if succeeds
-  esp += 2 * 4;
-HACKY_IMPORT_END()
 
+
+//Winmm.lib
 HACKY_IMPORT_BEGIN(timeGetTime)
   //FIXME: Avoid overflow?
   eax = SDL_GetTicks();
 HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(GetLastError)
-  silent = true;
-  eax = 0; // no error
-HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(TlsGetValue)
-  silent = true;
-  if (!silent) {
-    hacky_printf("dwTlsIndex 0x%" PRIX32 "\n", stack[1]);
-  }
-  eax = tls[stack[1]]; // TLS value FIXME!
-  esp += 1 * 4;
-HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(SetLastError)
-  silent = true;
-  if (!silent) {
-    hacky_printf("dwErrCode 0x%" PRIX32 "\n", stack[1]);
-  }
-  eax = 0; // TLS value FIXME!
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(LocalAlloc)
-  silent = true;
-  if (!silent) {
-    hacky_printf("uFlags 0x%" PRIX32 "\n", stack[1]);
-    hacky_printf("uBytes 0x%" PRIX32 "\n", stack[2]);
-  }
-  eax = Allocate(stack[2]);
-  // Only if zeroinit: clear
-  if (stack[1] & 0x40) {
-      memset(Memory(eax), 0x00, stack[2]);
-  }
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(LocalFree)
-  silent = true;
-  if (!silent) {
-    hacky_printf("hMem 0x%" PRIX32 "\n", stack[1]);
-  }
-  Free(stack[1]);
-  eax = 0; // NULL on success
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
+//User32.lib
 HACKY_IMPORT_BEGIN(FindWindowA)
   hacky_printf("lpClassName 0x%" PRIX32 " ('%s')\n", stack[1], (char*)Memory(stack[1]));
   hacky_printf("lpWindowName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -817,6 +531,7 @@ HACKY_IMPORT_BEGIN(FindWindowA)
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(MessageBoxA)
   hacky_printf("hWnd 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpText 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -827,20 +542,9 @@ HACKY_IMPORT_BEGIN(MessageBoxA)
   esp += 4 * 4;
 HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(ExitProcess)
-  hacky_printf("uExitCode 0x%" PRIX32 "\n", stack[1]);
-  exit(EXIT_FAILURE); //FIXME: Instead, handle this gracefully somehow?!
-  esp += 1 * 4;
-HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(GetTempPathA)
-  hacky_printf("nBufferLength 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpBuffer 0x%" PRIX32 "\n", stack[2]);
-  assert(stack[1] >= 6);
-  eax = sprintf((char*)Memory(stack[2]), "%s", "/tmp/"); // number of chars writte
-  esp += 2 * 4;
-HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(wsprintfA)
   // __cdecl!
   hacky_printf("lpOut 0x%" PRIX32 "\n", stack[1]);
@@ -874,74 +578,17 @@ HACKY_IMPORT_BEGIN(wsprintfA)
         count += sprintf(&out[count], "%d", stack[stackIndex++]);
         break;
       default:
-        printf("Unknown format type '%c'\n", type);
+        info_printf("Unknown format type '%c'\n", type);
         assert(false);
     }
   }
   eax = count;
 
-  printf("Out: '%s'\n", out);
+  info_printf("Out: '%s'\n", out);
 HACKY_IMPORT_END()
 
-FILE* handles[10000];
-uint32_t handle_index = 1;
 
-HACKY_IMPORT_BEGIN(CreateFileA)
-  const char* lpFileName = (char*)Memory(stack[1]);
-  hacky_printf("lpFileName 0x%" PRIX32 " ('%s')\n", stack[1], lpFileName);
-  hacky_printf("dwDesiredAccess 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("dwShareMode 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpSecurityAttributes 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("dwCreationDisposition 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("dwFlagsAndAttributes 0x%" PRIX32 "\n", stack[6]);
-  hacky_printf("hTemplateFile 0x%" PRIX32 "\n", stack[7]);
-  char* path = TranslatePath(lpFileName);
-  FILE* f = fopen(path, stack[2] & 0x40000000 ? (stack[5] == 4 ? "ab" : "wb") : "rb");
-  if (f != NULL) {
-    printf("File handle is 0x%" PRIX32 "\n", handle_index);
-    handles[handle_index] = f;
-    eax = handle_index;
-    handle_index++;
-  } else {
-    printf("Failed to open file ('%s' as '%s')\n", lpFileName, path);
-    eax = 0xFFFFFFFF;
-  }
-  free(path);
-  esp += 7 * 4;
-
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(WriteFile)
-  hacky_printf("hFile 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpBuffer 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("nNumberOfBytesToWrite 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpNumberOfBytesWritten 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("lpOverlapped 0x%" PRIX32 "\n", stack[5]);
-  *(uint32_t*)Memory(stack[4]) = fwrite(Memory(stack[2]), 1, stack[3], handles[stack[1]]);
-  eax = 1; // nonzero if succeeds
-  esp += 5 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(HeapFree)
-  hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpMem 0x%" PRIX32 "\n", stack[3]);
-  eax = 1; // nonzero if succeeds
-  esp += 3 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(CloseHandle)
-  hacky_printf("hObject 0x%" PRIX32 "\n", stack[1]);
-  if (stack[1] == 5554321) { // Thread handle..
-    eax = 1; // nonzero if succeeds
-  } else if (stack[1] == 5551337) { // Thread handle..
-    eax = 1; // nonzero if succeeds
-  } else {
-    eax = fclose(handles[stack[1]]) ? 0 : 1; // nonzero if succeeds
-  }
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
+//Ole32.lib
 HACKY_IMPORT_BEGIN(CoInitialize)
   hacky_printf("pvReserved 0x%" PRIX32 "\n", stack[1]);
   assert(stack[1] == 0x00000000);
@@ -949,11 +596,13 @@ HACKY_IMPORT_BEGIN(CoInitialize)
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//Ole32.lib
 HACKY_IMPORT_BEGIN(CoUninitialize)
   eax = 0; // void
   esp += 0 * 4;
 HACKY_IMPORT_END()
 
+//Ole32.lib
 HACKY_IMPORT_BEGIN(CoCreateInstance)
   hacky_printf("rclsid 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[2]);
@@ -966,14 +615,14 @@ HACKY_IMPORT_BEGIN(CoCreateInstance)
           clsid->Data1, clsid->Data2, clsid->Data3,
           clsid->Data4[0], clsid->Data4[1], clsid->Data4[2], clsid->Data4[3],
           clsid->Data4[4], clsid->Data4[5], clsid->Data4[6], clsid->Data4[7]);
-  printf("  (read clsid: {%s})\n", clsidString);
+  info_printf("  (read clsid: {%s})\n", clsidString);
   const API(IID)* iid = (const API(IID)*)Memory(stack[4]);
   char iidString[1024];
   sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
           iid->Data1, iid->Data2, iid->Data3,
           iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
           iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
-  printf("  (read iid: {%s})\n", iidString);
+  info_printf("  (read iid: {%s})\n", iidString);
   //FIXME: Unsure about most terminology / inner workings here
   static unsigned int comIndex = 0;
   char name[32];
@@ -1014,6 +663,7 @@ HACKY_IMPORT_BEGIN(CoCreateInstance)
   esp += 5 * 4;
 HACKY_IMPORT_END()
 
+//Ddraw.lib
 HACKY_IMPORT_BEGIN(DirectDrawCreate)
   hacky_printf("lpGUID 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lplpDD 0x%" PRIX32 "\n", stack[2]);
@@ -1023,6 +673,7 @@ HACKY_IMPORT_BEGIN(DirectDrawCreate)
   esp += 3 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(PeekMessageA)
   hacky_printf("lpMsg 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("hWnd 0x%" PRIX32 "\n", stack[2]);
@@ -1035,7 +686,7 @@ HACKY_IMPORT_BEGIN(PeekMessageA)
 	while (SDL_PollEvent(&event)) {
 		switch (event.type) {
 		case SDL_QUIT:
-      printf("\n\nSDL Exit!\n");
+      info_printf("\n\nSDL Exit!\n");
       exit(EXIT_FAILURE);
 			break;
     }
@@ -1045,26 +696,8 @@ HACKY_IMPORT_BEGIN(PeekMessageA)
   esp += 5 * 4;
 HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(GetCurrentDirectoryA)
-  hacky_printf("nBufferLength 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpBuffer 0x%" PRIX32 "\n", stack[2]);
-  const char* path = "C:\\tmp\\";
-  assert(stack[1] >= (strlen(path) + 1));
-  eax = sprintf((char*)Memory(stack[2]), "%s", path); // number of chars written
-  esp += 2 * 4;
-HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(ReadFile)
-  hacky_printf("hFile 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpBuffer 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("nNumberOfBytesToRead 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpNumberOfBytesRead 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("lpOverlapped 0x%" PRIX32 "\n", stack[5]);
-  *(uint32_t*)Memory(stack[4]) = fread(Memory(stack[2]), 1, stack[3], handles[stack[1]]);
-  eax = 1; // nonzero if succeeds
-  esp += 5 * 4;
-HACKY_IMPORT_END()
-
+//Advapi32.lib
 HACKY_IMPORT_BEGIN(RegCreateKeyExA)
   hacky_printf("hKey 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpSubKey 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -1081,6 +714,7 @@ HACKY_IMPORT_BEGIN(RegCreateKeyExA)
   esp += 9 * 4;
 HACKY_IMPORT_END()
 
+//Advapi32.lib
 HACKY_IMPORT_BEGIN(RegQueryValueExA)
   hacky_printf("hKey 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpValueName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -1100,6 +734,7 @@ HACKY_IMPORT_BEGIN(RegQueryValueExA)
   esp += 6 * 4;
 HACKY_IMPORT_END()
 
+//Advapi32.lib
 HACKY_IMPORT_BEGIN(RegSetValueExA)
   hacky_printf("hKey 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpValueName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -1111,12 +746,14 @@ HACKY_IMPORT_BEGIN(RegSetValueExA)
   esp += 6 * 4;
 HACKY_IMPORT_END()
 
+//Advapi32.lib
 HACKY_IMPORT_BEGIN(RegCloseKey)
   hacky_printf("hKey 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // ERROR_SUCCESS
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//Advapi32.lib
 HACKY_IMPORT_BEGIN(GetUserNameA)
   hacky_printf("lpBuffer 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpnSize 0x%" PRIX32 "\n", stack[2]);
@@ -1127,26 +764,8 @@ HACKY_IMPORT_BEGIN(GetUserNameA)
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(SetFilePointer)
-  hacky_printf("hFile 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lDistanceToMove 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpDistanceToMoveHigh 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("dwMoveMethod 0x%" PRIX32 "\n", stack[4]);
-  int moveMethods[] = { SEEK_SET, SEEK_CUR, SEEK_END };
-  assert(stack[4] < 3);
-  fseek(handles[stack[1]], stack[2], moveMethods[stack[4]]);
-  eax = ftell(handles[stack[1]]);
-  //FIXME: Higher word
-  esp += 4 * 4;
-HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(QueryPerformanceFrequency)
-  hacky_printf("lpFrequency 0x%" PRIX32 "\n", stack[1]);
-  *(uint64_t*)Memory(stack[1]) = SDL_GetPerformanceFrequency();
-  eax = 1; // BOOL - but doc: hardware supports a high-resolution performance counter = nonzero return
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(GetObjectA)
   hacky_printf("hgdiobj 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("cbBuffer 0x%" PRIX32 "\n", stack[2]);
@@ -1162,6 +781,7 @@ HACKY_IMPORT_BEGIN(GetObjectA)
   esp += 3 * 4;
 HACKY_IMPORT_END()
 
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(CreateCompatibleDC)
   hacky_printf("hdc 0x%" PRIX32 "\n", stack[1]);
   // Hack: This is large enough to fit a pointer to the object (SelectObject)
@@ -1169,6 +789,7 @@ HACKY_IMPORT_BEGIN(CreateCompatibleDC)
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(SelectObject)
   hacky_printf("hdc 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("hgdiobj 0x%" PRIX32 "\n", stack[2]);
@@ -1178,6 +799,7 @@ HACKY_IMPORT_BEGIN(SelectObject)
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(StretchBlt)
   hacky_printf("hdcDest 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("nXOriginDest 0x%" PRIX32 "\n", stack[2]);
@@ -1210,29 +832,32 @@ HACKY_IMPORT_BEGIN(StretchBlt)
   } else {
 
 
-    printf("\n\n\n\nblt!!!!!!\n\n\n\n");
+    info_printf("\n\n\n\nblt!!!!!!\n\n\n\n");
     glClearColor(1.0f,0.0f,1.0f,1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    printf("Invalid destination!\n");
+    info_printf("Invalid destination!\n");
   }
 
   eax = 1; //  succeeds = return value is nonzero.
   esp += 11 * 4;
 HACKY_IMPORT_END()
 
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(DeleteDC)
   hacky_printf("hdc 0x%" PRIX32 "\n", stack[1]);
   eax = 1; //  succeeds = return value is nonzero
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(DeleteObject)
   hacky_printf("hObject 0x%" PRIX32 "\n", stack[1]);
   eax = 1; //  succeeds = return value is nonzero
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(GetPixel)
   int nXPos = stack[2];
   int nYPos = stack[3];
@@ -1248,122 +873,10 @@ HACKY_IMPORT_BEGIN(GetPixel)
   esp += 3 * 4;
 HACKY_IMPORT_END()
 
-// Thread related
 
-HACKY_IMPORT_BEGIN(CreateThread)
-  // Loading in a worker-thread during a loadscreen - Acclaim.. gj.. NOT!
-  hacky_printf("lpThreadAttributes 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwStackSize 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpStartAddress 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpParameter 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("dwCreationFlags 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("lpThreadId 0x%" PRIX32 "\n", stack[6]);
-
-  //CreateEmulatedThread(stack[3]);
-
-  eax = 5554321; //  handle to new thread
-  esp += 6 * 4;
-
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(CreateEventA)
-  hacky_printf("lpEventAttributes 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("bManualReset 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("bInitialState 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpName 0x%" PRIX32 " ('%s')\n", stack[4], (char*)Memory(stack[4]));
-
-  eax = 5551337; // HANDLE
-  esp += 4 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SetEvent)
-  hacky_printf("hEvent 0x%" PRIX32 "\n", stack[1]);
-
-  eax = 1; //  succeeds = return value is nonzero
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(WaitForSingleObject)
-  hacky_printf("hHandle 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwMilliseconds %" PRId32 "\n", stack[2]);
-
-  eax = 0; // DWORD (0 = "The state of the specified object is signaled.")
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-//FIXME: Should be atomic by definition in OpenSWE1R?
-HACKY_IMPORT_BEGIN(InterlockedIncrement)
-  hacky_printf("Addend 0x%" PRIX32 "\n", stack[1]);
-  uint32_t* Addend = (uint32_t*)Memory(stack[1]);
-  *Addend = *Addend + 1;
-  eax = *Addend;
-  esp += 1 * 4; // FIXME: MSDN claims cdecl?! asm looks like stdcall
-HACKY_IMPORT_END()
-
-//FIXME: Should be atomic by definition in OpenSWE1R?
-HACKY_IMPORT_BEGIN(InterlockedDecrement)
-  hacky_printf("Addend 0x%" PRIX32 "\n", stack[1]);
-  uint32_t* Addend = (uint32_t*)Memory(stack[1]);
-  *Addend = *Addend - 1;
-  eax = *Addend;
-  esp += 1 * 4; // FIXME: MSDN claims cdecl?! asm looks like stdcall
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetCurrentThread)
-  eax = 12345; // nonzero if succeeds
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SetThreadPriority)
-  hacky_printf("hThread 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("nPriority 0x%" PRIX32 "\n", stack[2]);
-  eax = 1; // success = the return value is nonzero.
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(Sleep)
-  hacky_printf("dwMilliseconds 0x%" PRIX32 "\n", stack[1]);
-  SleepThread(stack[1]);
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(DeleteCriticalSection)
-  hacky_printf("lpCriticalSection 0x%" PRIX32 "\n", stack[1]);
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SuspendThread)
-  hacky_printf("hThread 0x%" PRIX32 "\n", stack[1]);
-  eax = 0; // FIXME: Suspend count or -1 in case of error
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(ResumeThread)
-  hacky_printf("hThread 0x%" PRIX32 "\n", stack[1]);
-  eax = 0; // FIXME: Suspend count or -1 in case of error
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(TerminateThread)
-  hacky_printf("hThread 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwExitCode 0x%" PRIX32 "\n", stack[2]);
-  //FIXME: This should exit the particular thread
-  eax = 1; // BOOL; non-zero on success
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(ExitThread)
-  hacky_printf("dwExitCode 0x%" PRIX32 "\n", stack[1]);
-  printf("\n\n\n\n\nMASSIVE HACK! STARTING NOW!\n\n\n\n\n");
-  SleepThread(0xFFFFFFFFFFFFFFFFLLU);
-  // Spinlock this thread..
-  eip = Allocate(2);
-  uint8_t* code = Memory(eip);
-  code[0] = 0xEB; // a: jmp a
-  code[1] = 0xFE;
-  esp += 1 * 4;
-HACKY_IMPORT_END()
 
 // Window creation function
+//User32.lib
 HACKY_IMPORT_BEGIN(LoadIconA)
   hacky_printf("hInstance 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpIconName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -1371,6 +884,7 @@ HACKY_IMPORT_BEGIN(LoadIconA)
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(LoadCursorA)
   hacky_printf("hInstance 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpCursorName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -1378,12 +892,14 @@ HACKY_IMPORT_BEGIN(LoadCursorA)
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(GetStockObject)
   hacky_printf("fnObject 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // NULL, pretend we failed
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(GetSystemMetrics)
   hacky_printf("nIndex %" PRId32 "\n", stack[1]);
   switch(stack[1]) {
@@ -1401,25 +917,28 @@ HACKY_IMPORT_BEGIN(GetSystemMetrics)
       break;
     default:
       eax = 16;
-      printf("Unknown metric\n");
+      info_printf("Unknown metric\n");
       assert(false);
       break;
   }
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(RegisterClassA)
   hacky_printf("lpWndClass 0x%" PRIX32 "\n", stack[1]);
   eax = 444; //FIXME: ATOM, whatever that is?!
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(RegisterClassExA)
   hacky_printf("lpWndClass 0x%" PRIX32 "\n", stack[1]);
   eax = 444; //FIXME: ATOM, whatever that is?!
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(CreateWindowExA)
   hacky_printf("dwExStyle 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpClassName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -1437,6 +956,7 @@ HACKY_IMPORT_BEGIN(CreateWindowExA)
   esp += 12 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(SetWindowPos)
   hacky_printf("hWnd 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("hWndInsertAfter 0x%" PRIX32 "\n", stack[2]);
@@ -1449,6 +969,7 @@ HACKY_IMPORT_BEGIN(SetWindowPos)
   esp += 7 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(ShowWindow)
   hacky_printf("hWnd 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("nCmdShow 0x%" PRIX32 "\n", stack[2]);
@@ -1456,12 +977,14 @@ HACKY_IMPORT_BEGIN(ShowWindow)
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(UpdateWindow)
   hacky_printf("hWnd 0x%" PRIX32 "\n", stack[1]);
   eax = 1; // nonzero if succeeds
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(SetCursor)
   hacky_printf("hCursor 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // NULL = there was no previous cursor
@@ -1470,12 +993,12 @@ HACKY_IMPORT_END()
 
 
 // WTF.. why?! COMCTL ordinal import which does nothing
-
+//Comctl32.lib
 HACKY_IMPORT_BEGIN(InitCommonControls)
 HACKY_IMPORT_END()
 
 // Weird font stuff
-
+//Gdi32.lib
 HACKY_IMPORT_BEGIN(CreateFontA)
   hacky_printf("nHeight 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("nWidth 0x%" PRIX32 "\n", stack[2]);
@@ -1496,137 +1019,11 @@ HACKY_IMPORT_BEGIN(CreateFontA)
   esp += 14 * 4;
 HACKY_IMPORT_END()
 
-// Console stuff
-
-HACKY_IMPORT_BEGIN(SetConsoleTextAttribute)
-  hacky_printf("hConsoleOutput 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("wAttributes 0x%" PRIX32 "\n", stack[2]);
-  eax = 1; // nonzero if succeeds
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(WriteConsoleA)
-  hacky_printf("hConsoleOutput 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpBuffer 0x%" PRIX32 " ('%.*s')\n", stack[2], stack[3], Memory(stack[2]));
-  hacky_printf("nNumberOfCharsToWrite 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpNumberOfCharsWritten 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("lpReserved 0x%" PRIX32 "\n", stack[5]);
-  eax = 1; // nonzero if succeeds
-  esp += 5 * 4;
-HACKY_IMPORT_END()
-
-// Function to find files
-
-HACKY_IMPORT_BEGIN(CreateDirectoryA)
-  const char* lpPathName = (const char*)Memory(stack[1]);
-  hacky_printf("lpPathName 0x%" PRIX32 " ('%s')\n", stack[1], lpPathName);
-  hacky_printf("lpSecurityAttributes 0x%" PRIX32 "\n", stack[2]);
-  eax = 1; // nonzero if succeeds
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SetFileAttributesA)
-  const char* lpFileName = (const char*)Memory(stack[1]);
-  hacky_printf("lpFileName 0x%" PRIX32 " ('%s')\n", stack[1], lpFileName);
-  hacky_printf("dwFileAttributes 0x%" PRIX32 "\n", stack[2]);
-  eax = 1; // nonzero if succeeds
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(FileTimeToLocalFileTime)
-  hacky_printf("lpFileTime 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpLocalFileTime 0x%" PRIX32 "\n", stack[2]);
-  //FIXME
-  eax = 1; // nonzero if succeeds
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(FileTimeToSystemTime)
-  hacky_printf("lpFileTime 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpSystemTime 0x%" PRIX32 "\n", stack[2]);
-  //FIXME
-  eax = 1; // nonzero if succeeds
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-
-HACKY_IMPORT_BEGIN(FindFirstFileA)
-  const char* pattern = (const char*)Memory(stack[1]);
-  hacky_printf("lpFileName 0x%" PRIX32 " ('%s')\n", stack[1], pattern);
-  hacky_printf("lpFindFileData 0x%" PRIX32 "\n", stack[2]);
-//dwFileAttributes
-  char* wildcard1 = strchr(pattern, '*');
-  char* wildcard2 = strchr(pattern, '?');
-  if ((wildcard1 == NULL) && (wildcard2 == NULL)) {
-    // It's asking explicitly for one file..
-    static char foundFile[128];
-    if ((pattern[0] == '.') && (pattern[1] == '\\')) {
-      pattern = &pattern[2];
-    } else {
-      assert(false);
-    }
-    strcpy(foundFile, pattern);
-    static const char* passthrough[] = {
-      ".", "..",
-      foundFile,
-      NULL
-    };
-    dirlisting = passthrough;
-  } else if (!strcmp(".\\data\\player\\*.sav", pattern)) {
-    static const char* profiles[] = {
-      ".", "..",
-      "anakin.sav",
-      NULL
-    };
-    dirlisting = profiles;
-  } else {
-    const char* none[] = { NULL };
-    dirlisting = none;
-    printf("Unknown pattern: '%s'\n", pattern);
-    SDL_Delay(3000);
-  }
-
-  if (*dirlisting) {
-    API(WIN32_FIND_DATA)* data = Memory(stack[2]);
-    data->dwFileAttributes = strchr(*dirlisting,'.') ? 0x80 : 0x10; // FILE_ATTRIBUTE_NORMAL or FILE_ATTRIBUTE_DIRECTORY
-    sprintf(data->cFileName, "%s", *dirlisting);
-    dirlisting++;
-    eax = 123; // File found
-  } else {
-    eax = 0xFFFFFFFF; // INVALID_HANDLE_VALUE = No files found
-  }
-
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(FindNextFileA)
-  hacky_printf("hFindFile 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpFindFileData 0x%" PRIX32 "\n", stack[2]);
-
-  if (*dirlisting) {
-    API(WIN32_FIND_DATA)* data = Memory(stack[2]);
-    data->dwFileAttributes = strchr(*dirlisting,'.') ? 0x80 : 0x10; // FILE_ATTRIBUTE_NORMAL or FILE_ATTRIBUTE_DIRECTORY
-    sprintf(data->cFileName, "%s", *dirlisting);
-    dirlisting++;
-    eax = 1; // File found
-  } else {
-    eax = 0; // No file found
-  }
-
-  esp += 2 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(FindClose)
-  hacky_printf("hFindFile 0x%" PRIX32 "\n", stack[1]);
-  eax = 1; // nonzero if succeeds
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
 
 
 
 // Name entry screen
-
+//User32.lib
 HACKY_IMPORT_BEGIN(GetKeyState)
   API(SHORT) pressed = 0x8000; // high order bit = pressed
   API(SHORT) toggled = 0x0001; // low order bit = toggled
@@ -1643,6 +1040,7 @@ HACKY_IMPORT_BEGIN(GetKeyState)
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+//User32.lib
 HACKY_IMPORT_BEGIN(MapVirtualKeyA)
   API(UINT) uCode = stack[1];
   API(UINT) uMapType = stack[2];
@@ -1671,7 +1069,7 @@ HACKY_IMPORT_BEGIN(MapVirtualKeyA)
       // Assume unmapped otherwise
       break;
     default:
-      printf("Unknown key map mode in MapVirtualKeyA\n");
+      info_printf("Unknown key map mode in MapVirtualKeyA\n");
       assert(false);
       break;
   }
@@ -1681,8 +1079,8 @@ HACKY_IMPORT_END()
 
 
 
-  // Copy protection
-
+// Copy protection
+//Advapi32.lib
 HACKY_IMPORT_BEGIN(RegOpenKeyExA)
   hacky_printf("hKey 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpSubKey 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
@@ -1693,34 +1091,10 @@ HACKY_IMPORT_BEGIN(RegOpenKeyExA)
   esp += 5 * 4;
 HACKY_IMPORT_END()
 
-HACKY_IMPORT_BEGIN(GetLogicalDrives)
-  eax = (1 << 0) | (1 << 2) | (1 << 3); // A, C, D
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetDriveTypeA)
-  hacky_printf("lpSubKey 0x%" PRIX32 " ('%s')\n", stack[1], (char*)Memory(stack[1]));
-  eax = 5; // Claim everything is CDROM
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(DeleteFileA)
-  hacky_printf("lpFileName 0x%" PRIX32 " ('%s')\n", stack[1], (char*)Memory(stack[1]));
-  //FIXME: Only stubbed for security reasons
-  eax = 1; // nonzero if succeeds
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SetErrorMode)
-  hacky_printf("uMode 0x%" PRIX32 "\n", stack[1]);
-  //FIXME: Only stubbed for security reasons
-  eax = 0; // Previous mode
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
 
 
 // CD check
-
+//Mincore.lib
 HACKY_IMPORT_BEGIN(GetFileVersionInfoSizeA)
   hacky_printf("lptstrFilename 0x%" PRIX32 " (%s)\n", stack[1], Memory(stack[1]));
   hacky_printf("lpdwHandle 0x%" PRIX32 "\n", stack[2]);
@@ -1732,75 +1106,6 @@ HACKY_IMPORT_BEGIN(GetFileVersionInfoSizeA)
   eax = 0; // Size of file version info [0 means error]
   esp += 2 * 4;
 HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(GetVolumeInformationA)
-  hacky_printf("lpRootPathName 0x%" PRIX32 " (%s)\n", stack[1], Memory(stack[1]));
-  hacky_printf("lpVolumeNameBuffer 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("nVolumeNameSize %" PRIu32 "\n", stack[3]);
-  hacky_printf("lpVolumeSerialNumber 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("lpMaximumComponentLength 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("lpFileSystemFlags 0x%" PRIX32 "\n", stack[6]);
-  hacky_printf("lpFileSystemNameBuffer 0x%" PRIX32 "\n", stack[7]);
-  hacky_printf("nFileSystemNameSize %" PRIu32 "\n", stack[8]);
-
-  strcpy(Memory(stack[2]), "racer100_0");
-
-  eax = 1; // BOOL, non-zero means all requested info was available
-  esp += 8 * 4;
-HACKY_IMPORT_END()
-
-
-
-
-
-
-
-// Smush
-
-HACKY_IMPORT_BEGIN(SmushGetFrameCount)
-  eax = 0; // int
-  // cdecl
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SmushPlay)
-  hacky_printf("filename 0x%" PRIX32 " ('%s')\n", stack[1], (char*)Memory(stack[1]));
-  hacky_printf("arg2 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("arg3 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("arg4 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("arg5 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("width %" PRIu32 "\n", stack[6]);
-  hacky_printf("height %" PRIu32 "\n", stack[7]);
-  hacky_printf("arg8 0x%" PRIX32 "\n", stack[8]);
-  hacky_printf("arg9 0x%" PRIX32 "\n", stack[9]);
-  hacky_printf("frameRenderCallback 0x%" PRIX32 "\n", stack[10]);
-  hacky_printf("arg11 0x%" PRIX32 "\n", stack[11]);
-  hacky_printf("arg12 0x%" PRIX32 "\n", stack[12]);
-  hacky_printf("arg13 0x%" PRIX32 "\n", stack[13]);
-
-  eax = 0; // int
-  // cdecl
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SmushSetVolume)
-  hacky_printf("volume 0x%" PRIX32 "\n", stack[1]);
-  eax = 0; // void
-  // cdecl
-HACKY_IMPORT_END()
-
-
-HACKY_IMPORT_BEGIN(SmushShutdown)
-  eax = 0; // void
-  // cdecl
-HACKY_IMPORT_END()
-
-HACKY_IMPORT_BEGIN(SmushStartup)
-  hacky_printf("hwnd 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("directSound 0x%" PRIX32 "\n", stack[2]);
-  eax = 1; // int
-  // cdecl
-HACKY_IMPORT_END()
-
-
 
 
 // IDirectPlayLobby3A 
@@ -1857,7 +1162,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 0)
           iid->Data1, iid->Data2, iid->Data3,
           iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
           iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
-  printf("  (read iid: {%s})\n", iidString);
+  info_printf("  (read iid: {%s})\n", iidString);
 
   char name[32];  
 
@@ -1907,20 +1212,20 @@ HACKY_COM_BEGIN(IDirectDraw4, 6)
 
   API(DDSURFACEDESC2)* desc = (API(DDSURFACEDESC2)*)Memory(stack[2]);
 
-  printf("dwSize = %" PRIu32 "\n", desc->dwSize);
-  printf("dwFlags = 0x%08" PRIX32 "\n", desc->dwFlags);
-  printf("ddsCaps.dwCaps = 0x%08" PRIX32 "\n", desc->ddsCaps.dwCaps);
-  printf("dwWidth = %" PRIu32 "\n", desc->dwWidth);
-  printf("dwHeight = %" PRIu32 "\n", desc->dwHeight);
+  info_printf("dwSize = %" PRIu32 "\n", desc->dwSize);
+  info_printf("dwFlags = 0x%08" PRIX32 "\n", desc->dwFlags);
+  info_printf("ddsCaps.dwCaps = 0x%08" PRIX32 "\n", desc->ddsCaps.dwCaps);
+  info_printf("dwWidth = %" PRIu32 "\n", desc->dwWidth);
+  info_printf("dwHeight = %" PRIu32 "\n", desc->dwHeight);
 
-  printf("ddpfPixelFormat.dwSize = %" PRIu32 "\n", desc->ddpfPixelFormat.dwSize);
-  printf("ddpfPixelFormat.dwFlags = 0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwFlags);
+  info_printf("ddpfPixelFormat.dwSize = %" PRIu32 "\n", desc->ddpfPixelFormat.dwSize);
+  info_printf("ddpfPixelFormat.dwFlags = 0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwFlags);
 
-  printf("ddpfPixelFormat.dwRGBBitCount = %" PRIu32 "\n", desc->ddpfPixelFormat.dwRGBBitCount);
-  printf("ddpfPixelFormat.dwRBitMask =        0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwRBitMask);
-  printf("ddpfPixelFormat.dwGBitMask =        0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwGBitMask);
-  printf("ddpfPixelFormat.dwBBitMask =        0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwBBitMask);
-  printf("ddpfPixelFormat.dwRGBAlphaBitMask = 0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwRGBAlphaBitMask);
+  info_printf("ddpfPixelFormat.dwRGBBitCount = %" PRIu32 "\n", desc->ddpfPixelFormat.dwRGBBitCount);
+  info_printf("ddpfPixelFormat.dwRBitMask =        0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwRBitMask);
+  info_printf("ddpfPixelFormat.dwGBitMask =        0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwGBitMask);
+  info_printf("ddpfPixelFormat.dwBBitMask =        0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwBBitMask);
+  info_printf("ddpfPixelFormat.dwRGBAlphaBitMask = 0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwRGBAlphaBitMask);
 
 
   memcpy(&surface->desc, desc, sizeof(API(DDSURFACEDESC2)));
@@ -1938,7 +1243,7 @@ enum {
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(surface->texture);
     texture->surface = surfaceAddress;
     glGenTextures(1, &texture->handle);
-    printf("GL handle is %d\n", texture->handle);
+    info_printf("GL handle is %d\n", texture->handle);
   } else {
     //FIXME: only added to catch bugs, null pointer should work
     surface->texture = CreateInterface("invalid", 200);
@@ -1992,7 +1297,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 8)
     esp -= 4;
     *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     eip = d;
-    printf("  Callback at 0x%" PRIX32 "\n", eip);
+    info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
 HACKY_COM_END()
@@ -2025,7 +1330,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 11)
   API(DDCAPS)* halCaps = Memory(stack[2]);
   API(DDCAPS)* swCaps = Memory(stack[3]);
 
-  printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
+  info_printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
 
   halCaps->dwCaps = API(DDCAPS_3D) | API(DDCAPS_BLTDEPTHFILL);
   halCaps->dwCaps2 = API(DDCAPS2_CANRENDERWINDOWED);
@@ -2110,12 +1415,12 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 0)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
   const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
-  printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
+  info_printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
          iid->Data1, iid->Data2, iid->Data3,
          iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
          iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
   if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
-    printf("Returning texture 0x%" PRIX32 "\n", this->texture);
+    info_printf("Returning texture 0x%" PRIX32 "\n", this->texture);
     *(Address*)Memory(stack[3]) = this->texture;
   } else {
     assert(false);
@@ -2229,14 +1534,14 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 12)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   API(DDSCAPS2)* caps = (API(DDSCAPS2)*)Memory(stack[2]);
 
-  printf("dwCaps = 0x%08" PRIX32 "\n", caps->dwCaps);
+  info_printf("dwCaps = 0x%08" PRIX32 "\n", caps->dwCaps);
 
   if (caps->dwCaps & API(DDSCAPS_MIPMAP)) {
     //FIXME: This is probably BAD!
-    printf("Redirecting to itself\n");
+    info_printf("Redirecting to itself\n");
     *(Address*)Memory(stack[3]) = stack[1];
   } else {
-    printf("Creating new dummy surface\n");
+    info_printf("Creating new dummy surface\n");
     Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50);
     API(DirectDrawSurface4)* surface = (API(DirectDrawSurface4)*)Memory(surfaceAddress);
     memset(&surface->desc, 0x00, sizeof(surface->desc));
@@ -2260,10 +1565,10 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 17)
   API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
   if (this->texture != 0) {
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(this->texture);
-    printf("Returning GL tex handle %d\n", texture->handle);
+    info_printf("Returning GL tex handle %d\n", texture->handle);
     *(Address*)Memory(stack[2]) = texture->handle;
   } else {
-    printf("Invalid GL tex handle\n");
+    info_printf("Invalid GL tex handle\n");
     *(Address*)Memory(stack[2]) = 0;
   }
 
@@ -2333,7 +1638,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   API(DDSURFACEDESC2)* desc = Memory(stack[3]);
   memcpy(desc, &this->desc, sizeof(API(DDSURFACEDESC2)));
   
-  printf("%d x %d (pitch: %d); bpp = %d; at 0x%08X\n", desc->dwWidth, desc->dwHeight, desc->lPitch, desc->ddpfPixelFormat.dwRGBBitCount, desc->lpSurface);
+  info_printf("%d x %d (pitch: %d); bpp = %d; at 0x%08X\n", desc->dwWidth, desc->dwHeight, desc->lPitch, desc->ddpfPixelFormat.dwRGBBitCount, desc->lpSurface);
 #if 0
   desc->dwWidth = 16;
   desc->dwHeight = 16;
@@ -2517,7 +1822,7 @@ iid->Data4[4] = 0xC0;
 iid->Data4[5] = 0x20;
 iid->Data4[6] = 0x15;
 iid->Data4[7] = 0x6E;
-  printf("\n\n\n\n\n\n\n  (planned iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n\n\n\n\n\n",
+  info_printf("\n\n\n\n\n\n\n  (planned iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n\n\n\n\n\n",
      iid->Data1, iid->Data2, iid->Data3,
      iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
      iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
@@ -2527,7 +1832,7 @@ iid->Data4[7] = 0x6E;
     esp -= 4;
     *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     eip = a;
-    printf("  Callback at 0x%" PRIX32 "\n", eip);
+    info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
 HACKY_COM_END()
@@ -2560,7 +1865,7 @@ HACKY_COM_BEGIN(IDirect3D3, 10)
   hacky_printf("EnumZBufferFormats\n");
   uint32_t b = stack[3];
   uint32_t c = stack[4];
-  printf("p 0x%" PRIX32 "\n", stack[1]);
+  info_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", b);
   hacky_printf("c 0x%" PRIX32 "\n", c);
@@ -2589,7 +1894,7 @@ HACKY_COM_BEGIN(IDirect3D3, 10)
     esp -= 4;
     *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     eip = b;
-    printf("  Callback at 0x%" PRIX32 "\n", eip);
+    info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
 HACKY_COM_END()
@@ -2615,13 +1920,13 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 0)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
   const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
-  printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
+  info_printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
      iid->Data1, iid->Data2, iid->Data3,
      iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
      iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
   #if 0
   if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
-  printf("Returning texture 0x%" PRIX32 "\n", this->texture);
+  info_printf("Returning texture 0x%" PRIX32 "\n", this->texture);
   *(Address*)Memory(stack[3]) = this->texture;
   } else {
   assert(false);
@@ -2754,7 +2059,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
 #endif
 
 
-    printf("  Callback at 0x%" PRIX32 "\n", eip);
+    info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
 HACKY_COM_END()
@@ -2948,7 +2253,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 22)
       break;
 
     default:
-      printf("Unknown render-state %d set to 0x%08" PRIX32 " (%f)\n", a, b, *(float*)&b);
+      info_printf("Unknown render-state %d set to 0x%08" PRIX32 " (%f)\n", a, b, *(float*)&b);
       assert(false);
       break;
   }
@@ -2968,15 +2273,15 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 25)
       memcpy(projectionMatrix, m, 4 * 4 * sizeof(float));
       break;
     default:
-      printf("Unknown matrix %d\n", a);
+      info_printf("Unknown matrix %d\n", a);
       //FIXME: assert(false) once this runs faster
       break;
   }
-  printf("Matrix %d:\n", a);
-  printf("  %f\t%f\t%f\t%f\n", m[ 0], m[ 1], m[ 2], m[ 3]);
-  printf("  %f\t%f\t%f\t%f\n", m[ 4], m[ 5], m[ 6], m[ 7]);
-  printf("  %f\t%f\t%f\t%f\n", m[ 8], m[ 9], m[10], m[11]);
-  printf("  %f\t%f\t%f\t%f\n", m[12], m[13], m[14], m[15]);
+  info_printf("Matrix %d:\n", a);
+  info_printf("  %f\t%f\t%f\t%f\n", m[ 0], m[ 1], m[ 2], m[ 3]);
+  info_printf("  %f\t%f\t%f\t%f\n", m[ 4], m[ 5], m[ 6], m[ 7]);
+  info_printf("  %f\t%f\t%f\t%f\n", m[ 8], m[ 9], m[10], m[11]);
+  info_printf("  %f\t%f\t%f\t%f\n", m[12], m[13], m[14], m[15]);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
@@ -3112,7 +2417,7 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 0)
           iid->Data1, iid->Data2, iid->Data3,
           iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
           iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
-  printf("  (read iid: {%s})\n", iidString);
+  info_printf("  (read iid: {%s})\n", iidString);
 
   char name[32];
   //FIXME: Add more classed / interfaces
@@ -3366,7 +2671,7 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
   UpdateKeyboardState();
   uint32_t* count = (uint32_t*)Memory(stack[4]);
   unsigned int max_count = *count;
-  printf("max count is %d\n", max_count);
+  info_printf("max count is %d\n", max_count);
   *count = 0;
   unsigned int objectSize = stack[2];
   assert(objectSize == sizeof(API(DIDEVICEOBJECTDATA)));
@@ -3377,14 +2682,14 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
         memset(&objectData, 0x00, sizeof(objectData));
         objectData.dwOfs = i;
         objectData.dwData = keyboardState[i];
-        printf("Adding %d: %d\n", objectData.dwOfs, objectData.dwData);
+        info_printf("Adding %d: %d\n", objectData.dwOfs, objectData.dwData);
         memcpy(Memory(stack[3] + *count * objectSize), &objectData, objectSize);
         *count = *count + 1;
       }
     }
   }
   memcpy(previousState, keyboardState, sizeof(keyboardState));
-  printf("returning %d entries\n", *count);
+  info_printf("returning %d entries\n", *count);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
@@ -3452,114 +2757,11 @@ HACKY_IMPORT_BEGIN(DirectDrawEnumerateA)
     *(uint32_t*)Memory(esp) = clearEax;
     eip = lpCallback;
 
-    printf("  Callback at 0x%" PRIX32 "\n", eip);
+    info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
 #endif
 HACKY_IMPORT_END()
-
-
-
-
-
-
-
-
-
-
-// DirectInput
-
-HACKY_IMPORT_BEGIN(DirectInputCreateA)
-  hacky_printf("hinst 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwVersion 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lplpDirectInput 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("punkOuter 0x%" PRIX32 "\n", stack[4]);
-  //FIXME: Unsure about most terminology / inner workings here
-  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputA", 200);
-  eax = 0; // HRESULT -> non-negative means success
-  esp += 4 * 4;
-HACKY_IMPORT_END()
-
-
-
-
-// IDirectInputA
-
-// IDirectInputA -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
-HACKY_COM_BEGIN(IDirectInputA, 2)
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  eax = 0; // FIXME: No idea what this expects to return..
-  esp += 1 * 4;
-HACKY_COM_END()
-
-// IDirectInputA -> STDMETHOD(CreateDevice)(THIS_ REFGUID,LPDIRECTINPUTDEVICEA *,LPUNKNOWN) PURE;
-HACKY_COM_BEGIN(IDirectInputA, 3)
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("rguid 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpIDD 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[4]);
-  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 200);
-  eax = 0; // HRESULT -> non-negative means success
-  esp += 4 * 4;
-HACKY_COM_END()
-
-// IDirectInputA -> STDMETHOD(EnumDevices)(THIS_ DWORD,LPDIENUMDEVICESCALLBACKA,LPVOID,DWORD) PURE;
-HACKY_COM_BEGIN(IDirectInputA, 4)
-  hacky_printf("EnumDevices\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  uint32_t a = stack[2];
-  uint32_t b = stack[3];
-  uint32_t c = stack[4];
-  uint32_t d = stack[5];
-  hacky_printf("a 0x%" PRIX32 "\n", a);
-  hacky_printf("b 0x%" PRIX32 "\n", b);
-  hacky_printf("c 0x%" PRIX32 "\n", c);
-  hacky_printf("d 0x%" PRIX32 "\n", d);
-  //FIXME: Do some callback stuff
-  eax = 0; // HRESULT -> non-negative means success
-  esp += 5 * 4;
-  // Push a call to the callback onto the stack.. this is some ugly hack..
-
-  // Convention is PASCAL
-
-  esp -= 4;
-  *(uint32_t*)Memory(esp) = returnAddress;
-
-  {
-    esp -= 4;
-    *(uint32_t*)Memory(esp) = c; // pvRef
-
-    Address ddiAddress = Allocate(sizeof(API(DIDEVICEINSTANCEA)));
-    API(DIDEVICEINSTANCEA)* ddi = Memory(ddiAddress);
-    memset(ddi, 0x00, sizeof(API(DIDEVICEINSTANCEA)));
-
-    ddi->dwSize = sizeof(API(DIDEVICEINSTANCEA));
-    //FIXME:    GUID guidInstance;
-    //FIXME:    GUID guidProduct;
-    enum {
-      API(DIDEVTYPE_KEYBOARD) = 3
-    };
-    ddi->dwDevType = API(DIDEVTYPE_KEYBOARD); // or something
-    sprintf(ddi->tszInstanceName, "OpenSWE1R Keyboard 1"); // TCHAR tszInstanceName[MAX_PATH];
-    sprintf(ddi->tszProductName, "OpenSWE1R Keyboard"); // TCHAR tszProductName[MAX_PATH];
-    //FIXME:    GUID guidFFDriver;
-    ddi->wUsagePage = 0; //FIXME look at usb spec?
-    ddi->wUsage = 0; //FIXME look at usb spec?
-
-    esp -= 4;
-    *(uint32_t*)Memory(esp) = ddiAddress; // LPCDIDEVICEINSTANCEA
-
-    // Emulate the call
-    esp -= 4;
-    *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
-    eip = b;
-
-    printf("  Callback at 0x%" PRIX32 "\n", eip);
-    //FIXME: Add a hook which returns 0
-  }
-HACKY_COM_END()
-
-
 
 
 
@@ -3576,10 +2778,10 @@ static void UcMallocHook(void* uc, uint64_t address, uint32_t size, void* user_d
 
   // Pop the return address
   Address returnAddress = stack[0];
-  printf("Return at 0x%" PRIX32 "\n", returnAddress);
+  info_printf("Return at 0x%" PRIX32 "\n", returnAddress);
 
   eax = Allocate(stack[1]);
-  printf("malloc(%d) -> 0x%08X\n", stack[1], eax);
+  info_printf("malloc(%d) -> 0x%08X\n", stack[1], eax);
 
   uc_reg_write(uc, UC_X86_REG_EAX, &eax);
   eip = returnAddress;
@@ -3601,9 +2803,9 @@ static void UcFreeHook(void* uc, uint64_t address, uint32_t size, void* user_dat
 
   // Pop the return address
   Address returnAddress = stack[0];
-  printf("Return at 0x%" PRIX32 "\n", returnAddress);
+  info_printf("Return at 0x%" PRIX32 "\n", returnAddress);
 
-  printf("free(0x%08X)\n", stack[1]);
+  info_printf("free(0x%08X)\n", stack[1]);
   Free(stack[1]);
 
   eax = 0;
@@ -3630,10 +2832,10 @@ static void UcTGAHook(void* uc, uint64_t address, uint32_t size, void* user_data
 
   // Pop the return address
   Address returnAddress = stack[0];
-  printf("Return at 0x%" PRIX32 "\n", returnAddress);
+  info_printf("Return at 0x%" PRIX32 "\n", returnAddress);
 
   //int __cdecl sub_48A230(int a1, char *a2, _DWORD *a3, _DWORD *a4)
-  printf("\n\n\n[ 48A230 ] TGAHook(0x%08X, 0x%08X, 0x%08X, 0x%08X)\n\n\n\n", stack[1], stack[2], stack[3], stack[4]);
+  info_printf("\n\n\n[ 48A230 ] TGAHook(0x%08X, 0x%08X, 0x%08X, 0x%08X)\n\n\n\n", stack[1], stack[2], stack[3], stack[4]);
 
   // Emulate instruction we overwrote
   eax = stack[1];
@@ -3672,10 +2874,10 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
   eip = returnAddress;
   esp += 4;
   
-  printf("\nUnknown function!\n\n");
+  info_printf("\nUnknown function!\n\n");
 
-  printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax);
-  printf("%7" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)user_data, returnAddress);
+  info_printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax);
+  info_printf("%7" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)user_data, returnAddress);
 
   callId++;
 
@@ -3690,7 +2892,7 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
 // NOTE: This purposely does not map the file into memory for portability
 Exe* LoadExe(const char* path) {
   exe = (Exe*)malloc(sizeof(Exe)); //FIXME: Hack to make this global!
-  memset(exe, 0x00, sizeof(exe));
+  memset(exe, 0x00, sizeof(Exe));
 
   // Load the exe file and skip the DOS header
   exe->f = fopen(path, "rb");
@@ -3711,13 +2913,13 @@ Exe* LoadExe(const char* path) {
   fread(peMagic, 1, 4, exe->f);
   assert(memcmp(peMagic, "PE\x00\x00", 4) == 0);
   fread(&exe->coffHeader, 1, sizeof(exe->coffHeader), exe->f);
-  printf("Machine type: 0x%" PRIX16 "\n", exe->coffHeader.machine);
-  printf("Number of sections: %" PRIu16 "\n", exe->coffHeader.numberOfSections);
+  sys_printf("Machine type: 0x%" PRIX16 "\n", exe->coffHeader.machine);
+  sys_printf("Number of sections: %" PRIu16 "\n", exe->coffHeader.numberOfSections);
   
   // Read optional PE header
   assert(exe->coffHeader.sizeOfOptionalHeader >= sizeof(exe->peHeader));
   fread(&exe->peHeader, 1, sizeof(exe->peHeader), exe->f);
-  printf("Entry point: 0x%" PRIX32 "\n", exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint);
+  sys_printf("Entry point: 0x%" PRIX32 "\n", exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint);
 
   //FIXME: Parse data dictionaries
   exe->dataDirectories = malloc(exe->peHeader.numberOfRvaAndSizes * sizeof(PeDataDirectory));
@@ -3743,7 +2945,7 @@ Exe* LoadExe(const char* path) {
     }
 
     // Debug printing
-    printf("Section %u: Virtual: 0x%" PRIX32 " - 0x%" PRIX32 " Initialized: 0x%" PRIX32 " - 0x%" PRIX32 " ('%.8s')\n", sectionIndex,
+    sys_printf("Section %u: Virtual: 0x%" PRIX32 " - 0x%" PRIX32 " Initialized: 0x%" PRIX32 " - 0x%" PRIX32 " ('%.8s')\n", sectionIndex,
            exe->peHeader.imageBase + section->virtualAddress,
            exe->peHeader.imageBase + section->virtualAddress + section->virtualSize - 1,
            exe->peHeader.imageBase + section->virtualAddress,
@@ -3762,14 +2964,14 @@ Exe* LoadExe(const char* path) {
       assert(baseRelocation->sizeOfBlock >= sizeof(API(IMAGE_BASE_RELOCATION)));
 
       unsigned int relocationCount = (baseRelocation->sizeOfBlock - sizeof(API(IMAGE_BASE_RELOCATION))) / 2;
-      printf("Base relocation: 0x%" PRIX32 " (%d relocations)\n", baseRelocation->virtualAddress, relocationCount);
+      sys_printf("Base relocation: 0x%" PRIX32 " (%d relocations)\n", baseRelocation->virtualAddress, relocationCount);
       uint16_t* relocations = Memory(relocationRva);
       for(unsigned int i = 0; i < relocationCount; i++) {
         uint16_t relocation = relocations[i];
         unsigned int type = relocation >> 12;
         unsigned int offset = relocation & 0xFFF;
     
-        printf("  Relocation (type %d) at 0x%" PRIX32 "\n", type, exe->peHeader.imageBase + baseRelocation->virtualAddress + offset);
+        sys_printf("  Relocation (type %d) at 0x%" PRIX32 "\n", type, exe->peHeader.imageBase + baseRelocation->virtualAddress + offset);
         switch(type) {
           case 0: // IMAGE_REL_BASED_ABSOLUTE
             // "This relocation is meaningless and is only used as a place holder to round relocation blocks up to a DWORD multiple size."
@@ -3795,7 +2997,7 @@ Exe* LoadExe(const char* path) {
   {
     uint32_t importRva = exe->peHeader.imageBase + exe->dataDirectories[1].virtualAddress;
     uint32_t remainingSize = exe->dataDirectories[1].size;
-    printf("Import table located at 0x%" PRIX32 "\n", importRva);
+    sys_printf("Import table located at 0x%" PRIX32 "\n", importRva);
     //FIXME: Should be done differently. Import table expects zero element at end which is not checked yet! (it's optional here)
     while(remainingSize >= sizeof(API(IMAGE_IMPORT_DESCRIPTOR))) {
 
@@ -3810,7 +3012,7 @@ Exe* LoadExe(const char* path) {
       //FIXME: Bound checking?
       uint32_t originalThunkAddress = exe->peHeader.imageBase + imports->originalFirstThunk;
       uint32_t thunkAddress = exe->peHeader.imageBase + imports->firstThunk;
-      printf("Imports for '%s' (0x%" PRIX32 " / 0x%" PRIX32 ")\n", name, originalThunkAddress, thunkAddress);
+      sys_printf("Imports for '%s' (0x%" PRIX32 " / 0x%" PRIX32 ")\n", name, originalThunkAddress, thunkAddress);
       while(1) {
         uint32_t importByNameAddress = *(uint32_t*)Memory(originalThunkAddress);
         uint32_t* symbolAddress = (uint32_t*)Memory(thunkAddress);
@@ -3822,13 +3024,20 @@ Exe* LoadExe(const char* path) {
         char* label;
         if (importByNameAddress & 0x80000000) {
           unsigned int ordinal = importByNameAddress & 0x7FFFFFFF;
-          printf("  0x%" PRIX32 ": @%" PRIu32 " ..", thunkAddress, ordinal);
+          sys_printf("  0x%" PRIX32 ": @%" PRIu32 " ..", thunkAddress, ordinal);
           label = malloc(128);
           sprintf(label, "<%s@%d>", name, ordinal);
         } else {
           API(IMAGE_IMPORT_BY_NAME)* importByName = Memory(exe->peHeader.imageBase + importByNameAddress);
-          printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' ..", thunkAddress, importByName->hint, importByName->name);
+          sys_printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' ..", thunkAddress, importByName->hint, importByName->name);
           label = importByName->name;
+        }
+
+        Export* export = NULL;
+        if (importByNameAddress & 0x80000000) {
+          export = LookupExportByOrdinal(name, importByNameAddress & 0x7FFFFFFF);
+        } else {
+          export = LookupExportByName(label);
         }
 
         //FIXME: This is a hack.. these calls were WAY too slow because UC is really bad at switching contexts
@@ -3847,32 +3056,26 @@ Exe* LoadExe(const char* path) {
           *code++ = 0x50; // push eax
           *code++ = 0xC3; // retn
           *symbolAddress = codeAddress;
-          printf("patched\n");
+          sys_printf("EnterCriticalSection, LeaveCriticalSection patched\n");
         } else
 #endif
         {
-          Export* export = NULL;
-          if (importByNameAddress & 0x80000000) {
-            export = LookupExportByOrdinal(name, importByNameAddress & 0x7FFFFFFF);
-          } else {
-            export = LookupExportByName(label);
-          }
-
+          
           if (export == NULL) {
             Address hltAddress = CreateHlt();
             AddHltHandler(hltAddress, UnknownImport, (void*)label);
             AddExport(label, UnknownImport, hltAddress);
             *symbolAddress = hltAddress;
-            printf("missing at 0x%08X\n", hltAddress);
+            sys_printf("missing at 0x%08X\n", hltAddress);
             //FIXME: Report error and assert false
           } else {
             if (true) { //(export->isVariable == false) {
-              Address hltAddress = CreateHlt();
-              AddHltHandler(hltAddress, export->callback, (void*)label);
-              *symbolAddress = hltAddress;
-              printf("found at 0x%08X\n", hltAddress);
+              Address symAddress = export->hook == 2 ? CreateInt21() : CreateHlt();
+              AddHltHandler(symAddress, export->callback, (void*)label);
+              *symbolAddress = symAddress;
+              sys_printf("found at 0x%08X\n", symAddress);
             } else {
-              printf("found.. is variable\n");
+              sys_printf("found.. is variable\n");
               assert(false);
             }
           }
@@ -3928,13 +3131,13 @@ void RunX86(Exe* exe) {
     void* mappedSection = (void*)exe->mappedSections[sectionIndex];
     if (mappedSection != NULL) {
       uint32_t base = exe->peHeader.imageBase + section->virtualAddress;
-      printf("Mapping 0x%" PRIX32 " - 0x%" PRIX32 "\n", base, base + section->virtualSize - 1);
+      sys_printf("Mapping 0x%" PRIX32 " - 0x%" PRIX32 "\n", base, base + section->virtualSize - 1);
       MapMemory(mappedSection, base, AlignUp(section->virtualSize, exe->peHeader.sectionAlignment), true, true, true);
     }
   }
 
   //FIXME: Schedule a virtual main-thread
-  printf("Emulation starting\n");
+  sys_printf("Emulation starting\n");
   CreateEmulatedThread(exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint);
   RunEmulation();
 
@@ -3942,12 +3145,12 @@ void RunX86(Exe* exe) {
 }
 
 int main(int argc, char* argv[]) {
-  printf("-- Initializing\n");
+  sys_printf("-- Initializing\n");
   InitializeEmulation();
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
-		  printf("Failed to initialize SDL2!\n");
+		  sys_printf("Failed to initialize SDL2!\n");
   }
-  printf("-- Creating window\n");
+  sys_printf("-- Creating window\n");
   {
     bool fullscreen = false;
     int w = 640;
@@ -3974,7 +3177,7 @@ int main(int argc, char* argv[]) {
     glewExperimental = GL_TRUE;
     GLenum err = glewInit();
     if (err != GLEW_OK) {
-      fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
+      sys_printf("Error: %s\n", glewGetErrorString(err));
       return 1;
     }
 
@@ -3994,7 +3197,7 @@ int main(int argc, char* argv[]) {
 
   	SDL_ShowWindow(sdlWindow);
   }
-  printf("-- Compiling shaders\n");
+  sys_printf("-- Compiling shaders\n");
   GLuint shader1Texture = 0;
   {
     GLuint vertexShader = CreateShader(VertexShader1Texture, GL_VERTEX_SHADER);
@@ -4005,27 +3208,27 @@ int main(int argc, char* argv[]) {
   PrintShaderProgramLog(shader1Texture);
   assert(linked);
   glUseProgram(shader1Texture); //FIXME: Hack..
-  printf("-- Loading exe\n");
+  sys_printf("-- Loading exe\n");
   Exe* exe = LoadExe(exeName);
   if (exe == NULL) {
-    printf("Couldn't load '%s'\n", exeName);
+    sys_printf("Couldn't load '%s'\n", exeName);
     exit(EXIT_FAILURE);
   }
   RelocateExe(exe);
 
   // Attempt to identify the game version using the COFF timestamp
   if (exe->coffHeader.timeDateStamp == 0x3727ce0e) {
-    printf("Game version: Retail, English\n");
+    sys_printf("Game version: Retail, English\n");
   } else if (exe->coffHeader.timeDateStamp == 0x3738c552) {
-    printf("Game version: Retail, German\n"); // International?
+    sys_printf("Game version: Retail, German\n"); // International?
   } else if (exe->coffHeader.timeDateStamp == 0x37582659) {
-    printf("Game version: Webdemo, English\n");
+    sys_printf("Game version: Webdemo, English\n");
   } else if (exe->coffHeader.timeDateStamp == 0x3c60692c) {
-    printf("Game version: Patched, English\n");
+    sys_printf("Game version: Patched, English\n");
   } else if (exe->coffHeader.timeDateStamp == 0x3c6321d1) {
-    printf("Game version: Patched, International\n");
+    sys_printf("Game version: Patched, International\n");
   } else {
-    printf("Game version: Unknown (COFF timestamp: 0x%08X)\n", exe->coffHeader.timeDateStamp);
+    sys_printf("Game version: Unknown (COFF timestamp: 0x%08X)\n", exe->coffHeader.timeDateStamp);
     assert(false);
   }
 
@@ -4066,9 +3269,9 @@ int main(int argc, char* argv[]) {
 
 //memset(Memory(0x423cd9), 0x90, 5); // Disable command line arg scanning
 
-  printf("-- Switching mode\n");
+  sys_printf("-- Switching mode\n");
   RunX86(exe);
-  printf("-- Exiting\n");
+  sys_printf("-- Exiting\n");
   UnloadExe(exe);
   return EXIT_SUCCESS;
 }

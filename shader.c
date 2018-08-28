@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "shader.h"
+#include "main.h"
 
 void PrintShaderLog(GLuint shader) {
   int infologLength = 0;
@@ -17,7 +18,7 @@ void PrintShaderLog(GLuint shader) {
   if (infologLength > 0) {
     infoLog = (char *)malloc(infologLength);
     glGetShaderInfoLog(shader, infologLength, &charsWritten, infoLog);
-    printf("%s\n",infoLog);
+    info_printf("%s\n",infoLog);
     free(infoLog);
   }
   return;
@@ -33,7 +34,7 @@ void PrintShaderProgramLog(GLuint program) {
   if (infologLength > 0) {
     infoLog = (char *)malloc(infologLength);
     glGetProgramInfoLog(program, infologLength, &charsWritten, infoLog);
-    printf("%s\n",infoLog);
+    info_printf("%s\n",infoLog);
     free(infoLog);
   }
 

@@ -215,7 +215,7 @@ HACKY_COM_BEGIN(IA3d4, 0)
           iid->Data1, iid->Data2, iid->Data3,
           iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
           iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
-  printf("  (read iid: {%s})\n", iidString);
+  info_printf("  (read iid: {%s})\n", iidString);
 
   char name[32];
   //FIXME: Add more classed / interfaces
@@ -230,6 +230,13 @@ HACKY_COM_BEGIN(IA3d4, 0)
 
   eax = 0;
   esp += 3 * 4;
+HACKY_COM_END()
+
+// IA3d4 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
+HACKY_COM_BEGIN(IA3d4, 2)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
 HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(GetHardwareCaps)				(THIS_ LPA3DCAPS_HARDWARE) PURE; // 11
@@ -665,6 +672,13 @@ HACKY_COM_BEGIN(IA3dSource, 61)
 HACKY_COM_END()
 
 
+
+// IA3dListener -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
+HACKY_COM_BEGIN(IA3dListener, 2)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
+HACKY_COM_END()
 
 // IA3dListener -> STDMETHOD(SetPosition3f)		(THIS_ A3DVAL, A3DVAL, A3DVAL) PURE; // 3
 HACKY_COM_BEGIN(IA3dListener, 3)

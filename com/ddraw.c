@@ -112,3 +112,4 @@ DECLARE_INTERFACE_(IDirectDrawPalette,IUnknown)
 
 #endif
 
+

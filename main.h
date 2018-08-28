@@ -9,11 +9,27 @@
 
 #include "emulation.h"
 
+typedef struct {
+    const char* name;
+    void(*callback)(void*, Address, void*);
+    Address address;
+    int hook; // hook type, 1:HLT, 2:INT
+} Export;
+
 extern uint32_t callId;
+
+extern const char** dirlisting;
 
 extern Address clearEax;
 
-static inline int hacky_printf(const char* fmt, ...) {
+extern uint32_t tls[];
+
+extern FILE* handles[];
+extern uint32_t handle_index;
+
+
+
+static inline int LogPrintf(const char* fmt, ...) {
 #if 1
   va_list args;
   va_start(args, fmt);
@@ -23,8 +39,19 @@ static inline int hacky_printf(const char* fmt, ...) {
 #endif
 }
 
+static inline int LogSilent(const char* fmt, ...) { return 0;
+}
+
+#define hacky_printf LogSilent
+#define info_printf LogSilent
+#define sys_printf LogPrintf
+#define my_printf LogPrintf
+
 Address CreateInterface(const char* name, unsigned int slotCount);
 void AddExport(const char* name, void* callback, Address address);
+void AddExport2(const char* name, void* callback);
+Export* LookupExportByName(const char* name);
+char* TranslatePath(const char* path);
 
 // Defines an INITIALIZER macro which will run code at startup
 #if defined(__GNUC__)
@@ -53,7 +80,7 @@ void AddExport(const char* name, void* callback, Address address);
   static void Hook_ ## _name (void* uc, Address _address, void* _user_data); \
   INITIALIZER(Register_ ## _name) { \
     const char* name = #_name; \
-    printf("Registering hook for '%s'\n", name); \
+    info_printf("Registering hook for '%s'\n", name); \
     AddExport(name, Hook_ ## _name, 0); \
   } \
   static void Hook_ ## _name (void* uc, Address _address, void* _user_data) { \
@@ -94,5 +121,30 @@ void AddExport(const char* name, void* callback, Address address);
 
 #define HACKY_COM_BEGIN(interface, slot) HACKY_IMPORT_BEGIN(interface ## __ ## slot)
 #define HACKY_COM_END() HACKY_IMPORT_END()
+
+#define HACKY_IMPORT_BEGIN2(_name) \
+  static void Hook_ ## _name (void* uc, Address _address, void* _user_data); \
+  INITIALIZER(Register_ ## _name) { \
+    const char* name = #_name; \
+    info_printf("Registering hook for '%s'\n", name); \
+    AddExport2(name, Hook_ ## _name); \
+  } \
+  static void Hook_ ## _name (void* uc, Address _address, void* _user_data) { \
+    int32_t eax, esp; \
+    uc_reg_read(uc, UC_X86_REG_ESP, &esp); \
+    uc_reg_read(uc, UC_X86_REG_EAX, &eax); \
+    uint32_t* stack = (uint32_t*)Memory(esp); \
+    Address returnAddress = stack[0]; \
+
+#define HACKY_IMPORT_END2(nargs) \
+    if (nargs) { \
+       esp += nargs << 2; \
+       uc_reg_write(uc, UC_X86_REG_ESP, &esp); \
+       stack = (uint32_t*)Memory(esp); \
+       stack[0] = returnAddress; \
+    } \
+    uc_reg_write(uc, UC_X86_REG_EAX, &eax); \
+    return nargs; \
+  }
 
 #endif

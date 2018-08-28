@@ -36,9 +36,34 @@ add_executable(openswe1r
   shader.c
 
   dll/kernel32.c
+  dll/user32.c
+  dll/gdi32.c
+  dll/advapi32.c
+  dll/ole32.c
+  dll/wsock32.c
+  dll/smush.c
 
   com/a3d.c
   com/dplay.c
+  com/dinput.c
+  com/ddraw.c
+  com/d3d.c
+
+  main.h
+  emulation.h
+  export.h
+  shader.h
+
+  descriptor.h
+  shaders.h
+  windows.h
+  common.h
+  exe.h
+
+  com/ddraw.h
+  com/dinput.h
+  com/a3d.h
+  com/d3d.h
 )
 
 if(USE_VM)

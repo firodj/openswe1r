@@ -18,6 +18,7 @@
 #include "descriptor.h"
 #include "emulation.h"
 #include "exe.h"
+#include "main.h"
 
 //FIXME: These are hacks (register when mapping instead!)!
 extern Exe* exe;
@@ -74,7 +75,7 @@ typedef struct {
 ThreadContext* threads = NULL; //FIXME: Store pointers to threads instead? (Probably doesn't matter for re-volt)
 
 static void TransferContext(ThreadContext* ctx, bool write) {
-  uc_err(*transfer)(uc_engine*, int, void*) = write ? uc_reg_write : uc_reg_read;
+  enum uc_err(*transfer)(uc_engine*, uc_x86_reg, void*) = write ? uc_reg_write : uc_reg_read;
   transfer(uc, UC_X86_REG_EIP, &ctx->eip);
   transfer(uc, UC_X86_REG_ESP, &ctx->esp);
   transfer(uc, UC_X86_REG_EBP, &ctx->ebp);
@@ -102,27 +103,27 @@ static void TransferContext(ThreadContext* ctx, bool write) {
 
 
 static void PrintContext(ThreadContext* ctx) {
-  printf("EIP: 0x%08" PRIX32 "\n", ctx->eip);
-  printf("ESP: 0x%08" PRIX32 "\n", ctx->esp);
-  printf("EBP: 0x%08" PRIX32 "\n", ctx->ebp);
-  printf("EAX: 0x%08" PRIX32 "\n", ctx->eax);
-  printf("EBX: 0x%08" PRIX32 "\n", ctx->ebx);
-  printf("ECX: 0x%08" PRIX32 "\n", ctx->ecx);
-  printf("EDX: 0x%08" PRIX32 "\n", ctx->edx);
-  printf("ESI: 0x%08" PRIX32 "\n", ctx->esi);
-  printf("EDI: 0x%08" PRIX32 "\n", ctx->edi);
-  printf("EFLAGS: 0x%08" PRIX32 "\n", ctx->eflags);
+  info_printf("EIP: 0x%08" PRIX32 "\n", ctx->eip);
+  info_printf("ESP: 0x%08" PRIX32 "\n", ctx->esp);
+  info_printf("EBP: 0x%08" PRIX32 "\n", ctx->ebp);
+  info_printf("EAX: 0x%08" PRIX32 "\n", ctx->eax);
+  info_printf("EBX: 0x%08" PRIX32 "\n", ctx->ebx);
+  info_printf("ECX: 0x%08" PRIX32 "\n", ctx->ecx);
+  info_printf("EDX: 0x%08" PRIX32 "\n", ctx->edx);
+  info_printf("ESI: 0x%08" PRIX32 "\n", ctx->esi);
+  info_printf("EDI: 0x%08" PRIX32 "\n", ctx->edi);
+  info_printf("EFLAGS: 0x%08" PRIX32 "\n", ctx->eflags);
 
-  printf("FPSW: 0x%04" PRIX16 "\n", ctx->fpsw);
-  printf("FPCW: 0x%04" PRIX16 "\n", ctx->fpcw);
-  printf("FPTAG: 0x%04" PRIX16 "\n", ctx->fptw);
+  info_printf("FPSW: 0x%04" PRIX16 "\n", ctx->fpsw);
+  info_printf("FPCW: 0x%04" PRIX16 "\n", ctx->fpcw);
+  info_printf("FPTAG: 0x%04" PRIX16 "\n", ctx->fptw);
 
   for(unsigned int i = 0; i < 8; i++) {
-    printf("FP%d: 0x", i);
+    info_printf("FP%d: 0x", i);
     for(unsigned int j = 0; j < 10; j++) {
-      printf("%02" PRIX8, ctx->fp[i].raw[9 - j]);
+      info_printf("%02" PRIX8, ctx->fp[i].raw[9 - j]);
     }
-    printf("\n");
+    info_printf("\n");
   }
 }
 
@@ -139,7 +140,7 @@ FIXME: type is one of
     UC_MEM_READ_PROT = 23,   // Read from read protected, but mapped, memory
     UC_MEM_FETCH_PROT = 24,  // Fetch from non-executable, but mapped, memory
 */
-  printf("Unicorn-Engine error of type %d at 0x%" PRIx64 ", size = 0x%" PRIX32 "\n", type, address, size);
+  info_printf("Unicorn-Engine error of type %d at 0x%" PRIx64 ", size = 0x%" PRIX32 "\n", type, address, size);
   uc_emu_stop(uc);
 
   ThreadContext ctx;
@@ -148,12 +149,12 @@ FIXME: type is one of
 
   int eip;
   uc_reg_read(uc, UC_X86_REG_EIP, &eip);
-  printf("Emulation returned %X\n", eip);
+  info_printf("Emulation returned %X\n", eip);
 
   int esp;
   uc_reg_read(uc, UC_X86_REG_ESP, &esp);
   for(int i = 0; i < 100; i++) {
-    printf("Stack [%d] = %X\n", i, *(uint32_t*)Memory(esp + i * 4));
+    info_printf("Stack [%d] = %X\n", i, *(uint32_t*)Memory(esp + i * 4));
   }
 
   assert(false);
@@ -167,7 +168,7 @@ static void UcTraceHook(void* uc, uint64_t address, uint32_t size, void* user_da
   uc_reg_read(uc, UC_X86_REG_EAX, &eax);
   uc_reg_read(uc, UC_X86_REG_ESI, &esi);
   static uint32_t id = 0;
-  printf("%7" PRIu32 " TRACE Emulation at 0x%X (ESP: 0x%X); eax = 0x%08" PRIX32 " esi = 0x%08" PRIX32 " (TS: %" PRIu64 ")\n", id++, eip, esp, eax, esi, SDL_GetTicks());
+  info_printf("%7" PRIu32 " TRACE Emulation at 0x%X (ESP: 0x%X); eax = 0x%08" PRIX32 " esi = 0x%08" PRIX32 " (TS: %" PRIu64 ")\n", id++, eip, esp, eax, esi, SDL_GetTicks());
 }
 
 typedef struct {
@@ -279,7 +280,7 @@ void MapMemory(void* memory, uint32_t address, uint32_t size, bool read, bool wr
   assert(size % ucAlignment == 0);
   err = uc_mem_map_ptr(uc, address, size, UC_PROT_ALL, memory);
   if (err) {
-    printf("Failed on uc_mem_map_ptr() with error returned %u: %s\n", err, uc_strerror(err));
+    info_printf("Failed on uc_mem_map_ptr() with error returned %u: %s\n", err, uc_strerror(err));
   }
   //FIXME: Add to mapped memory list
 }
@@ -341,6 +342,40 @@ Address CreateHlt() {
   return code_address;
 }
 
+Address CreateInt21() {
+  Address code_address = Allocate(3);
+  sys_printf("Interrupt handler 21h at 0x%08x\n", code_address);
+  uint8_t* code = Memory(code_address);
+  *code++ = 0xCD; // INT
+  *code++ = 0x21; // 21h;
+  *code++ = 0xC3; // End block with RET
+  return code_address;
+}
+
+Address CreateInt(uint32_t intno, uint32_t eax) {
+  Address code_address = Allocate(10);
+  sys_printf("Interrupt handler %xh:%x at 0x%08x\n", intno, eax, code_address);
+  uint8_t* code = Memory(code_address);
+  *code++ = 0x50; // PUSH EAX;
+  if (eax) {
+    *code++ = 0xB8; // MOV EAX,
+    *(uint32_t*)code = eax; // eax; (TODO make sure: little endian)
+    code += sizeof(uint32_t);
+  } else {
+    *code++ = 0x31; // XOR
+    *code++ = 0xC0; // EAX, EAX;
+  }
+  if (intno == 3) {
+    *code++ = 0xCC; // INT 3
+  } else {
+    *code++ = 0xCD; // INT
+    *code++ = intno; // intno;
+  }
+  *code++ = 0x58; // POP EAX;
+  *code++ = 0xC3; // End block with RET
+  return code_address;
+}
+
 typedef struct {
   Address address;
   void(*callback)(void* uc, Address address, void* user_data);
@@ -393,13 +428,45 @@ Address CreateCallback(void* callback, void* user) {
 
 #endif
 
+void UcInterruptHook(uc_engine *uc, uint32_t intno, void *user_data)
+{
+    bool silent = false;
+    
+    int32_t eip;
+    uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+    int32_t esp;
+    uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+    int32_t eax;
+    uc_reg_read(uc, UC_X86_REG_EAX, &eax);
+    
+    // Address stackAddress = esp;
+    uint32_t* stack = (uint32_t*)Memory(esp);
+    Address returnAddress = stack[0];
+    
+    /* This lists a stack trace. */
+    /* It's a failed attempt because most functions omit the frame pointer */
+    /*int ebp;
+     uc_reg_read(uc, UC_X86_REG_EBP, &ebp);
+     StackTrace(ebp, 10, 4); */
+    
+    //sys_printf(">>> 0x%x: interrupt 0x%x, EAX = 0x%x, ESP = 0x%x\n", eip, intno, eax, esp);
+
+    if (intno == 0x21) {
+      Address hltAddress = eip;
+      HltHandler* hltHandler = findHltHandler(hltAddress);
+      if(hltHandler != NULL) {
+        hltHandler->callback(uc, hltHandler->address, hltHandler->user_data);
+      }
+    }
+}
+
 void InitializeEmulation() {
 
   uc_err err;
 
   err = uc_open(UC_ARCH_X86, UC_MODE_32, &uc);
   if (err) {
-    printf("Failed on uc_open() with error returned %u: %s\n", err, uc_strerror(err));
+    info_printf("Failed on uc_open() with error returned %u: %s\n", err, uc_strerror(err));
   }
 
 #ifndef UC_KVM
@@ -424,6 +491,9 @@ void InitializeEmulation() {
     // Hook for memory fetch on non-executable memory
     uc_hook_add(uc, &errorHooks[5], UC_HOOK_MEM_FETCH_PROT, UcErrorHook, NULL, 1, 0);
   }
+    
+  uc_hook interruptHook;
+  uc_hook_add(uc, &interruptHook, UC_HOOK_INTR, UcInterruptHook, NULL, 1, 0);
 #endif
 
 #ifndef UC_KVM
@@ -467,6 +537,7 @@ void InitializeEmulation() {
 
 #if 0
   //FIXME: Steal actual register values, consult Windows ABI
+  //https://github.com/corkami/docs/blob/master/InitialValues.md
   int eax;
   int ebx;
   int ecx;
@@ -518,7 +589,7 @@ void SetProfiling(bool enabled) {
     // Setting address to zero signals that no profiling sample has started
     heat_address = 0;
 
-    printf("Profiling heat has been cleared\n");
+    info_printf("Profiling heat has been cleared\n");
   }
 
   static uc_hook profilingBlockHook = -1;
@@ -563,6 +634,8 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
   ctx->ebp = 0;
   ctx->sleep = 0;
   PrintContext(ctx);
+
+  return 0;
 }
 
 void SleepThread(uint64_t duration) {
@@ -594,7 +667,7 @@ void RunEmulation() {
 
     //FIXME: Decrement time by time slice instead..
     if (ctx->sleep > 0) {
-      printf("\n\n\n\n\nNot waking thread %d from sleep yet\n\n\n\n\n\n", currentThread);
+      info_printf("\n\n\n\n\nNot waking thread %d from sleep yet\n\n\n\n\n\n", currentThread);
       ctx->sleep -= 1;
       continue;
     }
@@ -641,15 +714,15 @@ void RunEmulation() {
     TransferContext(ctx, false);
 
     if (err != 0) {
-      printf("Failed on uc_emu_start() with error returned %u: %s\n", err, uc_strerror(err));
+      info_printf("Failed on uc_emu_start() with error returned %u: %s\n", err, uc_strerror(err));
       PrintContext(ctx);
       assert(false);
     }
 
-    printf("\n\n\n\n\nEmulation slice completed for thread %d (Count: %d) with %d at 0x%X\n", currentThread, threadCount, err, ctx->eip);
+    info_printf("\n\n\n\n\nEmulation slice completed for thread %d (Count: %d) with %d at 0x%X\n", currentThread, threadCount, err, ctx->eip);
 
     PrintContext(ctx);
-    printf("\n\n\n\n\n");
+    info_printf("\n\n\n\n\n");
   }
 }
 
