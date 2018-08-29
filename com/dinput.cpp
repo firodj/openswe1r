@@ -8,7 +8,9 @@
 #include "../emulation.h"
 #include "dinput.h"
 #include <string.h>
+#include <assert.h>
 
+#include "SDL.h"
 
 #if 0
 
@@ -181,6 +183,168 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
   }
 HACKY_COM_END()
 
+
+// IDirectInputDeviceA
+
+// IDirectInputDeviceA -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
+HACKY_COM_BEGIN(IDirectInputDeviceA, 2)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(GetCapabilities)(THIS_ LPDIDEVCAPS) PURE; // 3
+HACKY_COM_BEGIN(IDirectInputDeviceA, 3)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+
+  //FIXME!
+
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 2 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(SetProperty)(THIS_ REFGUID,LPCDIPROPHEADER) PURE; // 6
+HACKY_COM_BEGIN(IDirectInputDeviceA, 6)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+
+  //FIXME!
+
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(Acquire)(THIS) PURE; // 7
+HACKY_COM_BEGIN(IDirectInputDeviceA, 7)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(Unacquire)(THIS) PURE; // 8
+HACKY_COM_BEGIN(IDirectInputDeviceA, 8)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // HRESULT -> non-negative means success
+  esp += 1 * 4;
+HACKY_COM_END()
+
+uint8_t keyboardState[256];
+void UpdateKeyboardState() {
+  const Uint8 *sdlState = SDL_GetKeyboardState(NULL);
+  const uint8_t pressed = 0x80; // This is the only requirement for pressed keys
+  const uint8_t unpressed = 0x00;
+  memset(keyboardState, 0x00, 256);
+  keyboardState[API(DIK_ESCAPE)] = sdlState[SDL_SCANCODE_ESCAPE] ? pressed : unpressed;
+  keyboardState[API(DIK_RETURN)] = sdlState[SDL_SCANCODE_RETURN] ? pressed : unpressed;
+  keyboardState[API(DIK_SPACE)] = sdlState[SDL_SCANCODE_SPACE] ? pressed : unpressed;
+  keyboardState[API(DIK_UP)] = sdlState[SDL_SCANCODE_UP] ? pressed : unpressed;
+  keyboardState[API(DIK_DOWN)] = sdlState[SDL_SCANCODE_DOWN] ? pressed : unpressed;
+  keyboardState[API(DIK_LEFT)] = sdlState[SDL_SCANCODE_LEFT] ? pressed : unpressed;
+  keyboardState[API(DIK_RIGHT)] = sdlState[SDL_SCANCODE_RIGHT] ? pressed : unpressed;
+  keyboardState[API(DIK_Q)] = sdlState[SDL_SCANCODE_Q] ? pressed : unpressed;
+  keyboardState[API(DIK_W)] = sdlState[SDL_SCANCODE_W] ? pressed : unpressed;
+  keyboardState[API(DIK_E)] = sdlState[SDL_SCANCODE_E] ? pressed : unpressed;
+  keyboardState[API(DIK_R)] = sdlState[SDL_SCANCODE_R] ? pressed : unpressed;
+  keyboardState[API(DIK_I)] = sdlState[SDL_SCANCODE_I] ? pressed : unpressed;
+  keyboardState[API(DIK_A)] = sdlState[SDL_SCANCODE_A] ? pressed : unpressed;
+  keyboardState[API(DIK_S)] = sdlState[SDL_SCANCODE_S] ? pressed : unpressed;
+  keyboardState[API(DIK_D)] = sdlState[SDL_SCANCODE_D] ? pressed : unpressed;
+  keyboardState[API(DIK_F)] = sdlState[SDL_SCANCODE_F] ? pressed : unpressed;
+  keyboardState[API(DIK_J)] = sdlState[SDL_SCANCODE_J] ? pressed : unpressed;
+  keyboardState[API(DIK_K)] = sdlState[SDL_SCANCODE_K] ? pressed : unpressed;
+  keyboardState[API(DIK_L)] = sdlState[SDL_SCANCODE_L] ? pressed : unpressed;
+  keyboardState[API(DIK_M)] = sdlState[SDL_SCANCODE_M] ? pressed : unpressed;
+  keyboardState[API(DIK_F1)] = sdlState[SDL_SCANCODE_F1] ? pressed : unpressed;
+  keyboardState[API(DIK_F2)] = sdlState[SDL_SCANCODE_F2] ? pressed : unpressed;
+  keyboardState[API(DIK_F3)] = sdlState[SDL_SCANCODE_F3] ? pressed : unpressed;
+  keyboardState[API(DIK_F4)] = sdlState[SDL_SCANCODE_F4] ? pressed : unpressed;
+  keyboardState[API(DIK_F5)] = sdlState[SDL_SCANCODE_F5] ? pressed : unpressed;
+  keyboardState[API(DIK_F6)] = sdlState[SDL_SCANCODE_F6] ? pressed : unpressed;
+  keyboardState[API(DIK_F7)] = sdlState[SDL_SCANCODE_F7] ? pressed : unpressed;
+  keyboardState[API(DIK_F12)] = sdlState[SDL_SCANCODE_F12] ? pressed : unpressed;
+  keyboardState[API(DIK_GRAVE)] = sdlState[SDL_SCANCODE_GRAVE] ? pressed : unpressed;
+  keyboardState[API(DIK_EQUALS )] = sdlState[SDL_SCANCODE_EQUALS] ? pressed : unpressed;
+  keyboardState[API(DIK_MINUS)] = sdlState[SDL_SCANCODE_MINUS] ? pressed : unpressed;
+  keyboardState[API(DIK_TAB)] = sdlState[SDL_SCANCODE_TAB] ? pressed : unpressed;
+  keyboardState[API(DIK_CAPSLOCK)] = sdlState[SDL_SCANCODE_CAPSLOCK] ? pressed : unpressed;
+  keyboardState[API(DIK_LSHIFT)] = sdlState[SDL_SCANCODE_LSHIFT] ? pressed : unpressed;
+  keyboardState[API(DIK_RSHIFT)] = sdlState[SDL_SCANCODE_RSHIFT] ? pressed : unpressed;
+  keyboardState[API(DIK_LCONTROL)] = sdlState[SDL_SCANCODE_LCTRL] ? pressed : unpressed;
+  keyboardState[API(DIK_RCONTROL)] = sdlState[SDL_SCANCODE_RCTRL] ? pressed : unpressed;
+  keyboardState[API(DIK_LALT)] = sdlState[SDL_SCANCODE_LALT] ? pressed : unpressed;
+  keyboardState[API(DIK_RALT)] = sdlState[SDL_SCANCODE_RALT] ? pressed : unpressed;
+}
+
+// IDirectInputDeviceA -> STDMETHOD(GetDeviceState)(THIS_ DWORD,LPVOID) PURE; // 9
+HACKY_COM_BEGIN(IDirectInputDeviceA, 9)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  UpdateKeyboardState();
+  memcpy(Memory(stack[3]), keyboardState, stack[2]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(GetDeviceData)(THIS_ DWORD,LPDIDEVICEOBJECTDATA,LPDWORD,DWORD) PURE; // 10
+HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
+  hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
+
+  // Don't allow PEEK flag
+  assert(stack[5] == 0);
+
+  // Diff the keyboard input between calls
+  static uint8_t previousState[256] = {0};
+  assert(sizeof(previousState) == sizeof(keyboardState));
+  UpdateKeyboardState();
+  uint32_t* count = (uint32_t*)Memory(stack[4]);
+  unsigned int max_count = *count;
+  info_printf("max count is %d\n", max_count);
+  *count = 0;
+  unsigned int objectSize = stack[2];
+  assert(objectSize == sizeof(API(DIDEVICEOBJECTDATA)));
+  for(unsigned int i = 0; i < 256; i++) {
+    if (keyboardState[i] != previousState[i]) {
+      if (*count < max_count) {
+        API(DIDEVICEOBJECTDATA) objectData;
+        memset(&objectData, 0x00, sizeof(objectData));
+        objectData.dwOfs = i;
+        objectData.dwData = keyboardState[i];
+        info_printf("Adding %d: %d\n", objectData.dwOfs, objectData.dwData);
+        memcpy(Memory(stack[3] + *count * objectSize), &objectData, objectSize);
+        *count = *count + 1;
+      }
+    }
+  }
+  memcpy(previousState, keyboardState, sizeof(keyboardState));
+  info_printf("returning %d entries\n", *count);
+
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 5 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(SetDataFormat)(THIS_ LPCDIDATAFORMAT) PURE;
+HACKY_COM_BEGIN(IDirectInputDeviceA, 11)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  eax = 0; // HRESULT -> non-negative means success
+  esp += 2 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(SetCooperativeLevel)(THIS_ HWND,DWORD) PURE;
+HACKY_COM_BEGIN(IDirectInputDeviceA, 13)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  eax = 0; // HRESULT -> non-negative means success
+  esp += 3 * 4;
+HACKY_COM_END()
 
 
 

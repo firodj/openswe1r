@@ -33,6 +33,8 @@ add_executable(openswe1r
   emulation.cpp
   export.cpp
   shader.cpp
+  exe.cpp
+  common.cpp
 
   dll/kernel32.cpp
   dll/user32.cpp

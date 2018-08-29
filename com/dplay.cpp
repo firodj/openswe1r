@@ -537,3 +537,35 @@ HACKY_COM_BEGIN(IDirectPlay4, 38)
   esp += 3 * 4;
 HACKY_COM_END()
 
+// IDirectPlayLobby3A
+
+
+// IDirectPlayLobby3A -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
+HACKY_COM_BEGIN(IDirectPlayLobby3A, 2)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
+HACKY_COM_END()
+
+// IDirectPlayLobby3A -> STDMETHOD(GetConnectionSettings)(THIS_ DWORD, LPVOID, LPDWORD) PURE; //8
+HACKY_COM_BEGIN(IDirectPlayLobby3A, 8)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
+  *(uint32_t*)Memory(stack[4]) = 1000; //FIXME: Return proper size (revolt.exe assumes this is a certain minimum size and operates on it directly without checking)
+  //      eax = 0; // HRESULT -> non-negative means success
+  //HACK: Return NOTLOBBIED (?) which revolt thinks is fine = lobby already created?!
+  eax = 0x8877042e;
+  esp += 4 * 4;
+HACKY_COM_END()
+
+// IDirectPlayLobby3A -> STDMETHOD(RegisterApplication)  (THIS_ DWORD, LPVOID) PURE; //16
+HACKY_COM_BEGIN(IDirectPlayLobby3A, 16)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  eax = 0; // HRESULT -> non-negative means success
+  esp += 3 * 4;
+HACKY_COM_END()
+

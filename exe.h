@@ -98,5 +98,8 @@ typedef struct {
   uint32_t sizeOfBlock;
 } API(IMAGE_BASE_RELOCATION);
 
+Exe* LoadExe(const char* path);
+void UnloadExe(Exe* exe);
+void RelocateExe(Exe* exe);
 
 #endif
