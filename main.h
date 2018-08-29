@@ -9,6 +9,10 @@
 
 #include "emulation.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     const char* name;
     void(*callback)(void*, Address, void*);
@@ -144,5 +148,9 @@ char* TranslatePath(const char* path);
 
 #define HACKY_COM_BEGIN2(interface, slot) HACKY_IMPORT_BEGIN2(interface ## __ ## slot)
 #define HACKY_COM_END2(nargs) HACKY_IMPORT_END2(nargs)
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif

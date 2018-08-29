@@ -6,7 +6,10 @@
 #include "../windows.h"
 #include "../export.h"
 #include "../emulation.h"
+
 #include <assert.h>
+
+#define API__HEAP_ZERO_MEMORY 0x00000008
 
 #if 0
 
@@ -56,12 +59,15 @@ HACKY_IMPORT_END2(3)
 //Kernel32.lib
 HACKY_IMPORT_BEGIN2(HeapAlloc)
   //my_printf("HeapAlloc ");
-  //my_printf("hHeap:0x%" PRIX32 " ", stack[1]);
-  //my_printf("dwFlags:0x%" PRIX32 " ", stack[2]);
-  //my_printf("dwBytes:0x%" PRIX32 "\n", stack[3]);
+  //my_printf(" hHeap:0x%" PRIX32, stack[1]);
+  //my_printf(" dwFlags:0x%" PRIX32, stack[2]);
+  //my_printf(" dwBytes:0x%" PRIX32, stack[3]);
   eax = Allocate(stack[3]);
-  //FIXME: Only do this if flag is set..
-  memset(Memory(eax), 0x00, stack[3]);
+  //my_printf(" => 0x%" PRIX32 "\n", eax);
+
+  if (stack[2] & API(HEAP_ZERO_MEMORY)) {
+    memset(Memory(eax), 0x00, stack[3]);
+  }
 HACKY_IMPORT_END2(3)
 
 //Kernel32.lib

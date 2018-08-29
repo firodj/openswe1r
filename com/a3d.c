@@ -12,7 +12,7 @@
 
 #include "al.h"
 #include "alc.h"
-
+#include "a3d.h"
 
 typedef struct {
   void* vtable;
@@ -41,14 +41,8 @@ typedef struct {
   uint32_t type;
 } A3DSOURCE;
 
-// Play options
-#define A3D_SINGLE    0
-#define A3D_LOOPED    1
 
-#define A3DSTATUS_PLAYING           0x00000001
-#define A3DSTATUS_BUFFERLOST        0x00000002
-#define A3DSTATUS_LOOPING           0x00000004
-#define A3DSTATUS_WAITING_FOR_FLUSH 0x00001000
+#define a3d_printf LogPrintf
 
 #if 0
 DECLARE_INTERFACE_(IA3d4, IUnknown)
@@ -214,7 +208,8 @@ DECLARE_INTERFACE_(IA3dSource, IUnknown)
 
 // IA3d4 -> STDMETHOD(QueryInterface)				(THIS_ REFIID, LPVOID FAR *) PURE; // 0
 HACKY_COM_BEGIN(IA3d4, 0)
-  hacky_printf("QueryInterface\n");
+  a3d_printf("IA3d4::QueryInterface\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -245,6 +240,7 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IA3d4, 2)
+  a3d_printf("IA3d4::Release\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
@@ -252,6 +248,7 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(GetHardwareCaps)				(THIS_ LPA3DCAPS_HARDWARE) PURE; // 11
 HACKY_COM_BEGIN(IA3d4, 11)
+  a3d_printf("IA3d4::GetHardwareCaps\n");
   hacky_printf("GetHardwareCaps\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -261,6 +258,7 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(Flush)						(THIS) PURE; // 13
 HACKY_COM_BEGIN(IA3d4, 13)
+  a3d_printf("IA3d4::Flush\n");
   hacky_printf("Flush\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   eax = 0;
@@ -269,7 +267,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(Init)							(THIS_ LPGUID, DWORD, DWORD) PURE; // 15
 HACKY_COM_BEGIN(IA3d4, 15)
-  hacky_printf("Init\n");
+  a3d_printf("IA3d4::Init\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -292,11 +291,10 @@ HACKY_COM_BEGIN(IA3d4, 15)
 HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(NewSource)					(THIS_ DWORD, LPA3DSOURCE *) PURE; // 17
-HACKY_COM_BEGIN(IA3d4, 17)
-  hacky_printf("NewSource\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+HACKY_COM_BEGIN2(IA3d4, 17)
+  a3d_printf("IA3d4::NewSource");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" dwFlags:0x%" PRIX32, stack[2]);
 
   Address addr = CreateInterface("IA3dSource", 200, sizeof(A3DSOURCE));
   
@@ -308,6 +306,9 @@ HACKY_COM_BEGIN(IA3d4, 17)
   source->data = 0;
 
   //FIXME: Move these to proper functions, unless we need defaults
+  if (source->type & A3DSOURCE_TYPESTREAMED) {
+    alSourcei(source->al_source, AL_SOURCE_TYPE, AL_STREAMING);
+  }
 
   alSourcef(source->al_source, AL_PITCH, 1);
   // check for errors
@@ -319,18 +320,18 @@ HACKY_COM_BEGIN(IA3d4, 17)
   // check for errors
   alSourcei(source->al_source, AL_LOOPING, AL_FALSE);
 
+  a3d_printf(" ppSource:=0x%" PRIX32 "\n", addr);
   *(Address*)Memory(stack[3]) = addr;  
 
   eax = 0;
-  esp += 3 * 4;
-HACKY_COM_END()
+  //esp += 3 * 4;
+HACKY_COM_END2(3)
 
 // IA3d4 -> STDMETHOD(DuplicateSource)                (THIS_ LPA3DSOURCE, LPA3DSOURCE *) PURE; // 18
-HACKY_COM_BEGIN(IA3d4, 18)
-  hacky_printf("DuplicateSource\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("pOriginal 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("ppCopy 0x%" PRIX32 "\n", stack[3]);
+HACKY_COM_BEGIN2(IA3d4, 18)
+  a3d_printf("IA3d4::DuplicateSource");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" pOriginal:0x%" PRIX32, stack[2]);
 
   A3DSOURCE* source = Memory(stack[2]);
   Address addr = CreateInterface("IA3dSource", 200, sizeof(A3DSOURCE));
@@ -344,13 +345,17 @@ HACKY_COM_BEGIN(IA3d4, 18)
   dest->data = 0;
   dest->size_data = 0;
 
+  a3d_printf(" ppCopy:=0x%" PRIX32 "\n", addr);
+  *(Address*)Memory(stack[3]) = addr;
+
   eax = 0;
-  esp += 3 * 4;
-HACKY_COM_END()
+  //esp += 3 * 4;
+HACKY_COM_END2(3)
 
 // IA3d4 -> STDMETHOD(SetCooperativeLevel)			(THIS_ HWND, DWORD) PURE; // 19
 HACKY_COM_BEGIN(IA3d4, 19)
-  hacky_printf("SetCooperativeLevel\n");
+  a3d_printf("IA3d4::SetCooperativeLevel\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -360,7 +365,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(SetCoordinateSystem)			(THIS_ DWORD) PURE; // 23
 HACKY_COM_BEGIN(IA3d4, 23)
-  hacky_printf("SetCoordinateSystem\n");
+  a3d_printf("IA3d4::SetCoordinateSystem\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -369,7 +375,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(SetOutputGain)				(THIS_ A3DVAL) PURE; // 25
 HACKY_COM_BEGIN(IA3d4, 25)
-  hacky_printf("GetOutputGain\n");
+  a3d_printf("IA3d4::SetOutputGain\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -378,7 +385,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(GetOutputGain)				(THIS_ LPA3DVAL) PURE; // 26
 HACKY_COM_BEGIN(IA3d4, 26)
-  hacky_printf("GetOutputGain\n");
+  a3d_printf("IA3d4::GetOutputGain\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -387,7 +395,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(SetNumFallbackSources)		(THIS_ DWORD) PURE; // 27
 HACKY_COM_BEGIN(IA3d4, 27)
-  hacky_printf("SetNumFallbackSources\n");
+  a3d_printf("IA3d4::SetNumFallbackSources\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -396,7 +405,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(SetUnitsPerMeter) 			(THIS_ A3DVAL) PURE; // 32
 HACKY_COM_BEGIN(IA3d4, 32)
-  hacky_printf("SetUnitsPerMeter\n");
+  a3d_printf("IA3d4::SetUnitsPerMeter\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -405,7 +415,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(SetDopplerScale)				(THIS_ A3DVAL) PURE; // 34
 HACKY_COM_BEGIN(IA3d4, 34)
-  hacky_printf("SetDopplerScale\n");
+  a3d_printf("IA3d4::SetDopplerScale\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -414,7 +425,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(SetDistanceModelScale)		(THIS_ A3DVAL) PURE; // 36
 HACKY_COM_BEGIN(IA3d4, 36)
-  hacky_printf("SetDistanceModelScale\n");
+  a3d_printf("IA3d4::SetDistanceModelScale\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -423,7 +435,8 @@ HACKY_COM_END()
 
 // IA3d4 -> STDMETHOD(SetEq)						(THIS_ A3DVAL) PURE; // 38
 HACKY_COM_BEGIN(IA3d4, 38)
-  hacky_printf("SetEq\n");
+  a3d_printf("IA3d4::SetEq\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -431,92 +444,97 @@ HACKY_COM_BEGIN(IA3d4, 38)
 HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD_(ULONG,Release)			(THIS) PURE; // 2
-HACKY_COM_BEGIN(IA3dSource, 2)
-  hacky_printf("Release\n");
+HACKY_COM_BEGIN2(IA3dSource, 2)
+  a3d_printf("IA3dSource::Release\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   eax = 0;
-  esp += 1 * 4;
-HACKY_COM_END()
+  //esp += 1 * 4;
+HACKY_COM_END2(1)
 
 // IA3dSource -> STDMETHOD(AllocateWaveData)			(THIS_ INT) PURE; // 5
+// Ref: AllocateAudioData
 HACKY_COM_BEGIN2(IA3dSource, 5)
-  sys_printf("IA3dSource::AllocateWaveData");
-  sys_printf(" this:0x%" PRIX32, stack[1]);
-  sys_printf(" nSize:0x%" PRIX32 "\n", stack[2]);
+  a3d_printf("IA3dSource::AllocateWaveData");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" nSize:0x%" PRIX32 "\n", stack[2]);
 
-  // a = size?
   A3DSOURCE* this = Memory(stack[1]);
   this->size_data = stack[2];
   this->data = Allocate(this->size_data);
 
   eax = 0;
-  //esp += 2 * 4;
 HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(SetWaveFormat)			(THIS_ LPVOID) PURE; // 7
-HACKY_COM_BEGIN(IA3dSource, 7)
-  hacky_printf("SetWaveFormat\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+// Ref: SetAudioFormat
+HACKY_COM_BEGIN2(IA3dSource, 7)
+  a3d_printf("IA3dSource::SetWaveFormat");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" pWaveFormat:0x%" PRIX32 "\n", stack[2]);
 
   A3DSOURCE* this = Memory(stack[1]);
   memcpy(&this->fmt, Memory(stack[2]), sizeof(API(WAVEFORMATEX)));
 
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+  //esp += 2 * 4;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(GetType)					(THIS_ LPDWORD) PURE; // 10
-HACKY_COM_BEGIN(IA3dSource, 10)
-  hacky_printf("GetType\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+HACKY_COM_BEGIN2(IA3dSource, 10)
+  a3d_printf("IA3dSource::GetType");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
 
   A3DSOURCE* this = Memory(stack[1]);
+
+  a3d_printf(" dwType:=0x%" PRIX32 "\n", this->type);
   *(uint32_t*)Memory(stack[2]) = this->type;
 
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+  //esp += 2 * 4;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(Lock)						(THIS_ DWORD, DWORD, LPVOID *, LPDWORD, LPVOID *, LPDWORD, DWORD) PURE; // 11
-HACKY_COM_BEGIN(IA3dSource, 11)
-  sys_printf("Ia3dSource::Lock ");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  sys_printf("dwWriteCursor:0x%" PRIX32 " ", stack[2]);
-  sys_printf("dwNumBytes 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("pvAudioPtr1 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("dwAudioBytes1 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("pvAudioPtr2 0x%" PRIX32 "\n", stack[6]);
-  hacky_printf("dwAudioBytes2 0x%" PRIX32 "\n", stack[7]);
-  hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[8]);
+HACKY_COM_BEGIN2(IA3dSource, 11)
+  a3d_printf("Ia3dSource::Lock");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" dwWriteCursor:0x%" PRIX32, stack[2]);
+  a3d_printf(" dwNumBytes:0x%" PRIX32, stack[3]);
 
   assert(stack[8] == 0);
 
   A3DSOURCE* this = Memory(stack[1]);
+  uint32_t dwWriteCursor = stack[2];
 
   //FIXME: assert that the requested length is shorter than the buffer len etc.
-  *(Address*)Memory(stack[4]) = this->data;
-  *(uint32_t*)Memory(stack[5]) = stack[3];
+  Address pvAudioPtr1 = this->data + dwWriteCursor;
+  uint32_t dwAudioBytes1 = stack[3];
+  a3d_printf(" pvAudioPtr1:=0x%" PRIX32, pvAudioPtr1);
+  *(Address*)Memory(stack[4]) = pvAudioPtr1;
+  a3d_printf(" dwAudioBytes1:=0x%" PRIX32, dwAudioBytes1);
+  *(uint32_t*)Memory(stack[5]) = dwAudioBytes1;
 
   // Check if we can write a second buffer
+  a3d_printf(" pvAudioPtr2:0x%" PRIX32, stack[6]);
+  a3d_printf(" dwAudioBytes2:0x%" PRIX32, stack[7]);
+
   if (stack[6] && stack[7]) {
     *(Address*)Memory(stack[6]) = 0;
     *(uint32_t*)Memory(stack[7]) = 0;
   }
+  a3d_printf(" dwFlags:0x%" PRIX32 "\n", stack[8]);
 
   eax = 0;
-  esp += 8 * 4;
-HACKY_COM_END()
+  //esp += 8 * 4;
+HACKY_COM_END2(8)
 
 // IA3dSource -> STDMETHOD(Unlock)					(THIS_ LPVOID, DWORD, LPVOID, DWORD) PURE; // 12
-HACKY_COM_BEGIN(IA3dSource, 12)
-  hacky_printf("Unlock\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("pvAudioPtr1 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("dwNumBytes1 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("pvAudioPtr2 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("dwNumBytes2 0x%" PRIX32 "\n", stack[5]);
+HACKY_COM_BEGIN2(IA3dSource, 12)
+  a3d_printf("IA3dSource::Unlock");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" pvAudioPtr1:0x%" PRIX32, stack[2]);
+  a3d_printf(" dwNumBytes1:0x%" PRIX32, stack[3]);
+  a3d_printf(" pvAudioPtr2:0x%" PRIX32, stack[4]);
+  a3d_printf(" dwNumBytes2:0x%" PRIX32 "\n", stack[5]);
 
   A3DSOURCE* this = Memory(stack[1]);
   ALenum al_format; 
@@ -543,89 +561,100 @@ HACKY_COM_BEGIN(IA3dSource, 12)
   assert(this->fmt.wFormatTag == 0x0001);
   assert(this->fmt.nBlockAlign == (this->fmt.nChannels * this->fmt.wBitsPerSample / 8));
 
-  alBufferData(this->al_buffer, al_format, Memory(stack[2]), stack[3], this->fmt.nSamplesPerSec);
+  Address pvAudioPtr1 = stack[2];
+  uint32_t dwNumBytes1 = stack[3];
+  assert(pvAudioPtr1 >= this->data && pvAudioPtr1 < this->data + this->size_data);
+
+  //alBufferData(this->al_buffer, al_format, Memory(pvAudioPtr1), dwNumBytes1, this->fmt.nSamplesPerSec);
+  alBufferData(this->al_buffer, al_format, Memory(this->data), this->size_data, this->fmt.nSamplesPerSec);
 
   //FIXME: assert that this source isn't already playing etc.
-  alSourcei(this->al_source, AL_BUFFER, this->al_buffer);
-
+  ALint status;
+  alGetSourcei(this->al_source, AL_SOURCE_STATE, &status);
+  //if (status != AL_PLAYING) {
+    alSourcei(this->al_source, AL_BUFFER, this->al_buffer);
+  //}
   assert(stack[4] == 0);
   assert(stack[5] == 0);
 
   eax = 0;
-  esp += 5 * 4;
-HACKY_COM_END()
+  //esp += 5 * 4;
+HACKY_COM_END2(5)
 
 // IA3dSource -> STDMETHOD(Play)						(THIS_ INT) PURE; // 13
-HACKY_COM_BEGIN(IA3dSource, 13)
-  hacky_printf("Play\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+HACKY_COM_BEGIN2(IA3dSource, 13)
+  a3d_printf("IA3dSource::Play");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" nMode:0x%" PRIX32 "\n", stack[2]);
 
   bool looped = stack[2] == A3D_LOOPED;
 
   A3DSOURCE* this = Memory(stack[1]);
   ALint status;
-  alGetSourcei(this->al_source, AL_SOURCE_STATE, &status);
-  if (status != AL_PLAYING) {
+  //alGetSourcei(this->al_source, AL_SOURCE_STATE, &status);
+  //if (status != AL_PLAYING) {
     alSourcei(this->al_source, AL_LOOPING, looped);
     alSourcePlay(this->al_source);
-  }
+  //}
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+  //esp += 2 * 4;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(Stop)						(THIS) PURE; // 14
-HACKY_COM_BEGIN(IA3dSource, 14)
-  hacky_printf("Stop\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+HACKY_COM_BEGIN2(IA3dSource, 14)
+  a3d_printf("IA3dSource::Stop");
+  a3d_printf(" this:0x%" PRIX32 "\n", stack[1]);
+
   A3DSOURCE* this = Memory(stack[1]);
   alSourceStop(this->al_source);
   eax = 0;
-  esp += 1 * 4;
-HACKY_COM_END()
+  //esp += 1 * 4;
+HACKY_COM_END2(1)
 
 // IA3dSource -> STDMETHOD(Rewind)					(THIS) PURE; // 15
-HACKY_COM_BEGIN(IA3dSource, 15)
-  hacky_printf("Rewind\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+HACKY_COM_BEGIN2(IA3dSource, 15)
+  a3d_printf("IA3dSource::Rewind");
+  a3d_printf(" this:0x%" PRIX32 "\n", stack[1]);
+
   A3DSOURCE* this = Memory(stack[1]);
   alSourcei(this->al_source, AL_BYTE_OFFSET, 0);
   eax = 0;
-  esp += 1 * 4;
-HACKY_COM_END()
+  //esp += 1 * 4;
+HACKY_COM_END2(1)
 
 // IA3dSource -> STDMETHOD(SetWavePosition)            (THIS_ DWORD) PURE; // 18
 HACKY_COM_BEGIN(IA3dSource, 18)
-    hacky_printf("SetWavePosition\n");
+    a3d_printf("IA3dSource::SetWavePosition\n");
     hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
     hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
     A3DSOURCE* this = Memory(stack[1]);
-    alSourcei(this->al_source, AL_SAMPLE_OFFSET, stack[2]);
+    alSourcei(this->al_source, AL_BYTE_OFFSET, stack[2]);
 
     eax = 0;
     esp += 2 << 2;
 HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(GetWavePosition)            (THIS_ LPDWORD) PURE; // 19
-HACKY_COM_BEGIN(IA3dSource, 19)
-    hacky_printf("GetWavePosition\n");
-    hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-    hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+// Ref: GetPlayPosition
+HACKY_COM_BEGIN2(IA3dSource, 19)
+    a3d_printf("IA3dSource::GetWavePosition");
+    a3d_printf(" this:0x%" PRIX32, stack[1]);
 
     A3DSOURCE* this = Memory(stack[1]);
     ALint pos;
-    alGetSourcei(this->al_source, AL_BYTE_OFFSET, &pos);
-    //sys_printf("IA3dSource GetWavePosition = %d\n", pos);
+    alGetSourcei(this->al_source, AL_BYTE_OFFSET, &pos); // AL_BYTE_OFFSET or AL_SAMPLE_OFFSET ?
+
+    a3d_printf(" dwOffset:=0x%" PRIX32 "\n", pos);
     *(uint32_t*)Memory(stack[2]) = pos;
 
     eax = 0;
-    esp += 2 << 2;
-HACKY_COM_END()
+    //esp += 2 << 2;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(SetPosition3f)			(THIS_ A3DVAL, A3DVAL, A3DVAL) PURE; // 20
 HACKY_COM_BEGIN(IA3dSource, 20)
-  hacky_printf("SetPosition3f\n");
+  a3d_printf("IA3dSource::SetPosition3f\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -636,7 +665,7 @@ HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(SetVelocity3f)			(THIS_ A3DVAL, A3DVAL, A3DVAL) PURE; // 32
 HACKY_COM_BEGIN(IA3dSource, 32)
-  hacky_printf("SetVelocity3f\n");
+  a3d_printf("IA3dSource::SetVelocity3f\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -647,7 +676,7 @@ HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(SetMinMaxDistance)		(THIS_ A3DVAL, A3DVAL, DWORD) PURE; // 38
 HACKY_COM_BEGIN(IA3dSource, 38)
-  hacky_printf("SetMinMaxDistance\n");
+  a3d_printf("IA3dSource::SetMinMaxDistance\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -657,36 +686,38 @@ HACKY_COM_BEGIN(IA3dSource, 38)
 HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(SetGain)					(THIS_ A3DVAL) PURE; // 40
-HACKY_COM_BEGIN(IA3dSource, 40)
-  hacky_printf("SetGain\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("fGain 0x%" PRIX32 "\n", stack[2]);
+HACKY_COM_BEGIN2(IA3dSource, 40)
+  a3d_printf("IA3dSource::SetGain");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
 
   float fval = *(float*)&stack[2];
+  a3d_printf(" fGain:%f\n", fval);
+
   A3DSOURCE* this = Memory(stack[1]);
   alSourcef(this->al_source, AL_GAIN, fval);
 
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+  //esp += 2 * 4;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(SetPitch)					(THIS_ A3DVAL) PURE; // 42
-HACKY_COM_BEGIN(IA3dSource, 42)
-  hacky_printf("SetPitch\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("fPitch 0x%" PRIX32 "\n", stack[2]);
+HACKY_COM_BEGIN2(IA3dSource, 42)
+  a3d_printf("IA3dSource::SetPitch");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
 
   float fval = *(float*)&stack[2];
+  a3d_printf(" fPitch:%f\n", fval);
+
   A3DSOURCE* this = Memory(stack[1]);
   alSourcef(this->al_source, AL_PITCH, fval);
 
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+  //esp += 2 * 4;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(SetDopplerScale)			(THIS_ A3DVAL) PURE; // 44
 HACKY_COM_BEGIN(IA3dSource, 44)
-  hacky_printf("SetDopplerScale\n");
+  a3d_printf("IA3dSource::SetDopplerScale\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -694,17 +725,18 @@ HACKY_COM_BEGIN(IA3dSource, 44)
 HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(SetRenderMode)			(THIS_ DWORD) PURE; // 52
-HACKY_COM_BEGIN(IA3dSource, 52)
-  hacky_printf("SetRenderMode\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+HACKY_COM_BEGIN2(IA3dSource, 52)
+  a3d_printf("IA3dSource::SetRenderMode");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" dwMode:0x%" PRIX32 "\n", stack[2]);
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+
+  //esp += 2 * 4;
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(GetRenderMode)			(THIS_ LPDWORD) PURE; // 53
 HACKY_COM_BEGIN(IA3dSource, 53)
-  hacky_printf("GetRenderMode\n");
+  a3d_printf("IA3dSource::GetRenderMode\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
@@ -715,10 +747,9 @@ HACKY_COM_BEGIN(IA3dSource, 53)
 HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(GetStatus)				(THIS_ LPDWORD) PURE; // 56
-HACKY_COM_BEGIN(IA3dSource, 56)
-  hacky_printf("GetStatus\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("dwStatus 0x%" PRIX32 "\n", stack[2]);
+HACKY_COM_BEGIN2(IA3dSource, 56)
+  a3d_printf("IA3dSource::GetStatus");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
 
   uint32_t dwStatus = 0;
   A3DSOURCE* this = Memory(stack[1]);
@@ -728,15 +759,15 @@ HACKY_COM_BEGIN(IA3dSource, 56)
   alGetSourcei(this->al_source, AL_LOOPING, &status);
   if (status == AL_TRUE) dwStatus |= A3DSTATUS_LOOPING;
 
+  a3d_printf("dwStatus:=0x%" PRIX32 "\n", dwStatus);
   *(uint32_t*)Memory(stack[2]) = dwStatus;
 
   eax = 0;
-  esp += 2 * 4;
-HACKY_COM_END()
+HACKY_COM_END2(2)
 
 // IA3dSource -> STDMETHOD(SetPanValues)				(THIS_ DWORD, LPA3DVAL) PURE; // 57
 HACKY_COM_BEGIN(IA3dSource, 57)
-  hacky_printf("SetPanValues\n");
+  a3d_printf("IA3dSource::SetPanValues\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("nChannels 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("fGains 0x%" PRIX32 "\n", stack[3]);
@@ -746,18 +777,19 @@ HACKY_COM_BEGIN(IA3dSource, 57)
 HACKY_COM_END()
 
 // IA3dSource -> STDMETHOD(SetWaveEvent)				(THIS_ DWORD, HANDLE) PURE; // 59
-HACKY_COM_BEGIN(IA3dSource, 59)
-  hacky_printf("SetWaveEvent\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+// Ref: SetPlayEvent
+HACKY_COM_BEGIN2(IA3dSource, 59)
+  a3d_printf("IA3dSource::SetWaveEvent");
+  a3d_printf(" this:0x%" PRIX32, stack[1]);
+  a3d_printf(" dwOffset:0x%" PRIX32, stack[2]);
+  a3d_printf(" hEvent:0x%" PRIX32 "\n", stack[3]);
   eax = 0;
-  esp += 3 * 4;
-HACKY_COM_END()
+  //esp += 3 * 4;
+HACKY_COM_END2(3)
 
 // IA3dSource -> STDMETHOD(SetTransformMode)			(THIS_ DWORD) PURE; // 61
 HACKY_COM_BEGIN(IA3dSource, 61)
-  hacky_printf("SetTransformMode\n");
+  a3d_printf("IA3dSource::SetTransformMode\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   eax = 0;
@@ -768,6 +800,8 @@ HACKY_COM_END()
 
 // IA3dListener -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IA3dListener, 2)
+  a3d_printf("IA3dListener::Release\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
@@ -775,7 +809,8 @@ HACKY_COM_END()
 
 // IA3dListener -> STDMETHOD(SetPosition3f)		(THIS_ A3DVAL, A3DVAL, A3DVAL) PURE; // 3
 HACKY_COM_BEGIN(IA3dListener, 3)
-  hacky_printf("SetPosition3f\n");
+  a3d_printf("IA3dListener::SetPosition3f\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -786,7 +821,8 @@ HACKY_COM_END()
 
 // IA3dListener -> STDMETHOD(SetOrientation6f)		(THIS_ A3DVAL, A3DVAL, A3DVAL, A3DVAL, A3DVAL, A3DVAL) PURE; // 11
 HACKY_COM_BEGIN(IA3dListener, 11)
-  hacky_printf("SetOrientation6f\n");
+  a3d_printf("IA3dListener::SetOrientation6f\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -800,7 +836,8 @@ HACKY_COM_END()
 
 // IA3dListener -> STDMETHOD(SetVelocity3f)		(THIS_ A3DVAL, A3DVAL, A3DVAL) PURE; // 15
 HACKY_COM_BEGIN(IA3dListener, 15)
-  hacky_printf("SetVelocity3f\n");
+  a3d_printf("IA3dListener::SetVelocity3f\n");
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);

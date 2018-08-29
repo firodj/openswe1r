@@ -747,7 +747,8 @@ void RunEmulation() {
       }
       
       if (currentTime > lastTime + 333) {
-        sys_printf("<%d> Timeout EIP = 0x%x, ticks = %d\n", ctx->id, ctx->eip, currentTime - lastTime);
+        //sys_printf("<%d> Timeout EIP = 0x%x, ticks = %d\n", ctx->id, ctx->eip, currentTime - lastTime);
+        sys_printf("%d>", ctx->id);
         break; // Context switch after several ticks (ms)
       }
     }

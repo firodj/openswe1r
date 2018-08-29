@@ -1,3 +1,37 @@
 // Copyright 2017 OpenSWE1R Maintainers
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
+
+#ifndef __OPENSWE1R_COM_A3D_H__
+#define __OPENSWE1R_COM_A3D_H__
+
+// Play options
+#define A3D_SINGLE    0
+#define A3D_LOOPED    1
+
+#define A3DSTATUS_PLAYING           0x00000001
+#define A3DSTATUS_BUFFERLOST        0x00000002
+#define A3DSTATUS_LOOPING           0x00000004
+#define A3DSTATUS_WAITING_FOR_FLUSH 0x00001000
+
+// Source render mode
+
+#define A3DSOURCE_RENDERMODE_A3D             0x0000
+#define A3DSOURCE_RENDERMODE_MONO            0x0001
+#define A3DSOURCE_RENDERMODE_A2D             0x0002
+#define A3DSOURCE_RENDERMODE_1ST_REFLECTIONS 0x0004
+#define A3DSOURCE_RENDERMODE_OCCLUSIONS      0x0008
+#define A3DSOURCE_RENDERMODE_STATIC          0x0010
+#define A3DSOURCE_RENDERMODE_NATIVE          0x0020
+#define A3DSOURCE_RENDERMODE_DEFAULT (A3DSOURCE_RENDERMODE_A3D |\
+                                      A3DSOURCE_RENDERMODE_1ST_REFLECTIONS |\
+                                      A3DSOURCE_RENDERMODE_OCCLUSIONS)
+
+// Source types
+#define A3DSOURCE_TYPE3D            0x00000000
+#define A3DSOURCE_TYPESTEREO        0x00000001
+#define A3DSOURCE_TYPEUNMANAGED     0x00000002
+#define A3DSOURCE_TYPESTREAMED      0x00000004
+#define A3DSOURCE_TYPEDEFAULT       A3DSOURCE_TYPE3D
+
+#endif
