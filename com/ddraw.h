@@ -8,7 +8,7 @@
 #include "../emulation.h"
 
 #include "d3d.h"
-
+    
 typedef struct {
   uint32_t dwSize;
   uint32_t dwFlags;

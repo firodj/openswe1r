@@ -1,6 +1,8 @@
 // Copyright 2017 OpenSWE1R Maintainers
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
+#ifndef __OPENSWE1R_EXE_H__
+#define __OPENSWE1R_EXE_H__
 
 #include <stdint.h>
 
@@ -95,3 +97,6 @@ typedef struct {
   uint32_t virtualAddress;
   uint32_t sizeOfBlock;
 } API(IMAGE_BASE_RELOCATION);
+
+
+#endif

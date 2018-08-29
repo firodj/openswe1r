@@ -52,7 +52,7 @@ unsigned int threadCount = 0;
 static ThreadContext* threads = NULL; //FIXME: Store pointers to threads instead? (Probably doesn't matter for re-volt)
 
 static void TransferContext(ThreadContext* ctx, bool write) {
-  enum uc_err(*transfer)(uc_engine*, uc_x86_reg, void*) = write ? uc_reg_write : uc_reg_read;
+  uc_err(*transfer)(uc_engine*, uc_x86_reg, const void*) = write ? (uc_err(*)(uc_engine*, uc_x86_reg, const void*))uc_reg_write : (uc_err(*)(uc_engine*, uc_x86_reg, const void*))uc_reg_read;
   transfer(uc, UC_X86_REG_EIP, &ctx->eip);
   transfer(uc, UC_X86_REG_ESP, &ctx->esp);
   transfer(uc, UC_X86_REG_EBP, &ctx->ebp);
@@ -108,7 +108,7 @@ static void PrintContext(ThreadContext* ctx) {
 
 // Callback for tracing all kinds of memory errors
 static void UcErrorHook(uc_engine* uc, uc_mem_type type, uint64_t address, int size, int64_t value, void* user_data) {
-  char *type_string = "";
+  const char *type_string = "";
   switch (type) {
       case UC_MEM_READ: type_string = "Memory is read from"; break;
       case UC_MEM_WRITE: type_string = "Memory is written to"; break;
@@ -142,6 +142,7 @@ static void UcErrorHook(uc_engine* uc, uc_mem_type type, uint64_t address, int s
 }
 
 // Callback for tracing instructions
+#if 0
 static void UcTraceHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
   int eip, esp, eax, esi;
   uc_reg_read(uc, UC_X86_REG_EIP, &eip);
@@ -149,8 +150,9 @@ static void UcTraceHook(void* uc, uint64_t address, uint32_t size, void* user_da
   uc_reg_read(uc, UC_X86_REG_EAX, &eax);
   uc_reg_read(uc, UC_X86_REG_ESI, &esi);
   static uint32_t id = 0;
-  info_printf("%7" PRIu32 " TRACE Emulation at 0x%X (ESP: 0x%X); eax = 0x%08" PRIX32 " esi = 0x%08" PRIX32 " (TS: %" PRIu64 ")\n", id++, eip, esp, eax, esi, SDL_GetTicks());
+  sys_printf("%7" PRIu32 " TRACE Emulation at 0x%X (ESP: 0x%X); eax = 0x%08" PRIX32 " esi = 0x%08" PRIX32 " (TS: %" PRIu64 ")\n", id++, eip, esp, eax, esi, GetTicks());
 }
+#endif
 
 typedef struct {
   bool is_called;
@@ -183,16 +185,20 @@ static void UcProfilingBlockHook(uc_engine *uc, uint64_t address, uint32_t size,
   }
 }
 
+#if 0
 static void UcProfilingHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
   static Uint64 instruction_started = 0;
   static bool is_called = false;
   static bool is_block_enter = false;
   if (heat_address != 0) {
-    Uint64 instruction_finished = SDL_GetPerformanceCounter();
+    Uint64 instruction_finished;
+    GetPerformanceCounter(&instruction_finished);
 
+    uint64_t freq;
+    GetPerformanceCounter(&freq);
     uint64_t duration = instruction_finished - instruction_started;
     duration *= 1000000000ULL;
-    duration /= SDL_GetPerformanceFrequency();
+    duration /= freq;
 
     if (heat == NULL) {
       heat = malloc(0x10000 * sizeof(Heat*));
@@ -212,7 +218,8 @@ static void UcProfilingHook(void* uc, uint64_t address, uint32_t size, void* use
     h->is_block_enter |= is_block_enter;
     h->is_block_exit |= heat_is_block_enter_next;
   }
-  instruction_started = SDL_GetPerformanceCounter();
+
+  GetPerformanceCounter(&instruction_started);
   heat_address = address;
   is_called = heat_is_called_next;
   is_block_enter = heat_is_block_enter_next;
@@ -222,6 +229,7 @@ static void UcProfilingHook(void* uc, uint64_t address, uint32_t size, void* use
   heat_is_called_next = false;
   heat_is_block_enter_next = false;
 }
+
 
 void DumpProfilingHeat(const char* path) {
   FILE* f;
@@ -254,6 +262,8 @@ void DumpProfilingHeat(const char* path) {
     fclose(f);
   }
 }
+#endif
+
 
 void MapMemory(void* memory, uint32_t address, uint32_t size, bool read, bool write, bool execute) {
   //FIXME: Permissions!
@@ -316,7 +326,7 @@ void* Memory(uint32_t address) {
 
 Address CreateHlt() {
   Address code_address = Allocate(2);
-  uint8_t* code = Memory(code_address);
+  uint8_t* code = (uint8_t*)Memory(code_address);
   *code++ = 0xF4; // HLT
   //FIXME: Are changes to regs even registered here?!
   *code++ = 0xC3; // End block with RET
@@ -326,7 +336,7 @@ Address CreateHlt() {
 Address CreateInt21() {
   Address code_address = Allocate(3);
   sys_printf("Interrupt handler 21h at 0x%08x\n", code_address);
-  uint8_t* code = Memory(code_address);
+  uint8_t* code = (uint8_t*)Memory(code_address);
   *code++ = 0xCD; // INT
   *code++ = 0x21; // 21h;
   *code++ = 0xC3; // End block with RET
@@ -336,7 +346,7 @@ Address CreateInt21() {
 Address CreateInt(uint32_t intno, uint32_t eax) {
   Address code_address = Allocate(10);
   sys_printf("Interrupt handler %xh:%x at 0x%08x\n", intno, eax, code_address);
-  uint8_t* code = Memory(code_address);
+  uint8_t* code = (uint8_t*)Memory(code_address);
   *code++ = 0x50; // PUSH EAX;
   if (eax) {
     *code++ = 0xB8; // MOV EAX,
@@ -359,7 +369,7 @@ Address CreateInt(uint32_t intno, uint32_t eax) {
 
 typedef struct {
   Address address;
-  void(*callback)(void* uc, Address address, void* user_data);
+  ExportCallback callback;
   void* user_data;
 } HltHandler;
 HltHandler* hltHandlers = NULL;
@@ -370,14 +380,14 @@ int compareHltHandlers(const void * a, const void * b) {
 }
 
 HltHandler* findHltHandler(Address address) {
-  return bsearch(&address, hltHandlers, hltHandlerCount, sizeof(HltHandler), compareHltHandlers);
+  return (HltHandler*)bsearch(&address, hltHandlers, hltHandlerCount, sizeof(HltHandler), compareHltHandlers);
 }
 
-void AddHltHandler(Address address, void(*callback)(void* uc, Address address, void* user_data), void* user_data) {
+void AddHltHandler(Address address, ExportCallback callback, void* user_data) {
   HltHandler* handler = findHltHandler(address);
   assert(handler == NULL); // Currently only supporting one handler
 
-  hltHandlers = realloc(hltHandlers, ++hltHandlerCount * sizeof(HltHandler));
+  hltHandlers = (HltHandler*)realloc(hltHandlers, ++hltHandlerCount * sizeof(HltHandler));
   handler = &hltHandlers[hltHandlerCount - 1];
   handler->address = address;
   handler->callback = callback;
@@ -455,26 +465,26 @@ void InitializeEmulation() {
   uc_hook errorHooks[6];
   {
     // Hook for memory read on unmapped memory
-    uc_hook_add(uc, &errorHooks[0], UC_HOOK_MEM_READ_UNMAPPED, UcErrorHook, NULL, 1, 0);
+    uc_hook_add(uc, &errorHooks[0], UC_HOOK_MEM_READ_UNMAPPED, (void*)UcErrorHook, NULL, 1, 0);
 
     // Hook for invalid memory write events
-    uc_hook_add(uc, &errorHooks[1], UC_HOOK_MEM_WRITE_UNMAPPED, UcErrorHook, NULL, 1, 0);
+    uc_hook_add(uc, &errorHooks[1], UC_HOOK_MEM_WRITE_UNMAPPED, (void*)UcErrorHook, NULL, 1, 0);
 
     // Hook for invalid memory fetch for execution events
-    uc_hook_add(uc, &errorHooks[2], UC_HOOK_MEM_FETCH_UNMAPPED, UcErrorHook, NULL, 1, 0);
+    uc_hook_add(uc, &errorHooks[2], UC_HOOK_MEM_FETCH_UNMAPPED, (void*)UcErrorHook, NULL, 1, 0);
 
     // Hook for memory read on read-protected memory
-    uc_hook_add(uc, &errorHooks[3], UC_HOOK_MEM_READ_PROT, UcErrorHook, NULL, 1, 0);
+    uc_hook_add(uc, &errorHooks[3], UC_HOOK_MEM_READ_PROT, (void*)UcErrorHook, NULL, 1, 0);
 
     // Hook for memory write on write-protected memory
-    uc_hook_add(uc, &errorHooks[4], UC_HOOK_MEM_WRITE_PROT, UcErrorHook, NULL, 1, 0);
+    uc_hook_add(uc, &errorHooks[4], UC_HOOK_MEM_WRITE_PROT, (void*)UcErrorHook, NULL, 1, 0);
 
     // Hook for memory fetch on non-executable memory
-    uc_hook_add(uc, &errorHooks[5], UC_HOOK_MEM_FETCH_PROT, UcErrorHook, NULL, 1, 0);
+    uc_hook_add(uc, &errorHooks[5], UC_HOOK_MEM_FETCH_PROT, (void*)UcErrorHook, NULL, 1, 0);
   }
     
   uc_hook interruptHook;
-  uc_hook_add(uc, &interruptHook, UC_HOOK_INTR, UcInterruptHook, NULL, 1, 0);
+  uc_hook_add(uc, &interruptHook, UC_HOOK_INTR, (void*)UcInterruptHook, NULL, 1, 0);
 #endif
 
 #ifndef UC_KVM
@@ -530,16 +540,17 @@ void InitializeEmulation() {
 #endif
 
   // Map and set TLS (not exposed via flat memory)
-  uint8_t* tls = aligned_malloc(ucAlignment, tlsSize);
+  uint8_t* tls = (uint8_t*)aligned_malloc(ucAlignment, tlsSize);
   memset(tls, 0xBB, tlsSize);
   err = uc_mem_map_ptr(uc, tlsAddress, tlsSize, UC_PROT_WRITE | UC_PROT_READ, tls);
 
   // Allocate a heap
-  heap = aligned_malloc(ucAlignment, heapSize);
+  heap = (uint8_t*)aligned_malloc(ucAlignment, heapSize);
   memset(heap, 0xAA, heapSize);
   MapMemory(heap, heapAddress, heapSize, true, true, true);
 }
 
+#if 0
 void SetTracing(bool enabled) {
   // Add a trace hook so we get proper EIP after running
   static uc_hook traceHook = -1;
@@ -554,6 +565,7 @@ void SetTracing(bool enabled) {
     }
   }
 }
+
 
 void SetProfiling(bool enabled) {
 
@@ -577,10 +589,10 @@ void SetProfiling(bool enabled) {
   static uc_hook profilingHook = -1;
   if (enabled) {
     if (profilingBlockHook == -1) {
-      uc_hook_add(uc, &profilingBlockHook, UC_HOOK_BLOCK, UcProfilingBlockHook, NULL, 1, 0);
+      uc_hook_add(uc, &profilingBlockHook, UC_HOOK_BLOCK, (void*)UcProfilingBlockHook, NULL, 1, 0);
     }
     if (profilingHook == -1) {
-      uc_hook_add(uc, &profilingHook, UC_HOOK_CODE, UcProfilingHook, NULL, 1, 0);
+      uc_hook_add(uc, &profilingHook, UC_HOOK_CODE, (void*)UcProfilingHook, NULL, 1, 0);
     }
   } else {
     if (profilingBlockHook != -1) {
@@ -593,23 +605,24 @@ void SetProfiling(bool enabled) {
     }
   }
 }
+#endif
 
 Address CreateThreadBegin()
 {
     Address symAddress = 0;
-    Export* export = LookupExportByName("ExitThread");
-    if (export) {
-        if (export->address == 0) {
+    Export* export_sym = LookupExportByName("ExitThread");
+    if (export_sym) {
+        if (export_sym->address == 0) {
             symAddress = CreateInt21();
-            AddHltHandler(symAddress, export->callback, export->name);
-            export->address = symAddress;
+            AddHltHandler(symAddress, export_sym->callback, (void*)export_sym->name);
+            export_sym->address = symAddress;
         } else {
-            symAddress = export->address;
+            symAddress = export_sym->address;
         }
     }
     
     Address thread_begin = Allocate(10);
-    uint8_t* code = Memory(thread_begin);
+    uint8_t* code = (uint8_t*)Memory(thread_begin);
     *code++ = 0xFF; // CALL
     *code++ = 0xD0; //   EAX;
     if (symAddress) {
@@ -629,7 +642,7 @@ unsigned int CreateEmulatedThread(uint32_t eip, bool suspended) {
   static int threadId = 0;
     
   threadId++;
-  threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
+  threads = (ThreadContext*)realloc(threads, ++threadCount * sizeof(ThreadContext));
   ThreadContext* ctx = &threads[threadCount - 1];
   ctx->id = threadId;
     
@@ -637,7 +650,7 @@ unsigned int CreateEmulatedThread(uint32_t eip, bool suspended) {
   // Map and set stack
   //FIXME: Use requested size
   if (stack == NULL) {
-    stack = aligned_malloc(ucAlignment, stackSize);
+    stack = (uint8_t*)aligned_malloc(ucAlignment, stackSize);
     MapMemory(stack, stackAddress, stackSize, true, true, false);
   }
     
@@ -709,10 +722,11 @@ void RunEmulation() {
 
     TransferContext(ctx, true /* write */);
 
-    uint32_t lastTime = SDL_GetTicks();
+    uint32_t lastTime = GetTicks();
     while(ctx->active && ctx->running) {
       err = uc_emu_start(uc, ctx->eip, 0, 0, 3000000);
 
+#if 0
       // Finish profiling, if we have partial data
       if (heat_address != 0) {
         // Signal block exit by marking the next instruction as block entry
@@ -724,13 +738,13 @@ void RunEmulation() {
         // Setting address to zero signals that no profiling sample has started
         heat_address = 0;
       }
-
+#endif
       // Check for errors
       if (err != 0) {
         break;
       }
 
-      uint32_t currentTime = SDL_GetTicks();
+      uint32_t currentTime = GetTicks();
     
       uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
 

@@ -274,15 +274,15 @@ HACKY_COM_BEGIN(IA3d4, 15)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
 
-  A3d4* this = Memory(stack[1]);
+  A3d4* This = (A3d4*)Memory(stack[1]);
 
-  this->device = alcOpenDevice(NULL);
-  assert(this->device != NULL);
+  This->device = alcOpenDevice(NULL);
+  assert(This->device != NULL);
 
-  this->context = alcCreateContext(this->device, NULL);
+  This->context = alcCreateContext(This->device, NULL);
 
   //FIXME: Do this on every call which uses this context instead
-  if (!alcMakeContextCurrent(this->context)) {
+  if (!alcMakeContextCurrent(This->context)) {
     assert(false);
   }
 
@@ -298,7 +298,7 @@ HACKY_COM_BEGIN2(IA3d4, 17)
 
   Address addr = CreateInterface("IA3dSource", 200, sizeof(A3DSOURCE));
   
-  A3DSOURCE* source = Memory(addr);
+  A3DSOURCE* source = (A3DSOURCE*)Memory(addr);
   alGenSources(1, &source->al_source);
   alGenBuffers(1, &source->al_buffer);
   source->type = stack[2];
@@ -333,9 +333,9 @@ HACKY_COM_BEGIN2(IA3d4, 18)
   a3d_printf(" this:0x%" PRIX32, stack[1]);
   a3d_printf(" pOriginal:0x%" PRIX32, stack[2]);
 
-  A3DSOURCE* source = Memory(stack[2]);
+  A3DSOURCE* source = (A3DSOURCE*)Memory(stack[2]);
   Address addr = CreateInterface("IA3dSource", 200, sizeof(A3DSOURCE));
-  A3DSOURCE* dest = Memory(addr);
+  A3DSOURCE* dest = (A3DSOURCE*)Memory(addr);
   alGenSources(1, &dest->al_source);
   alGenBuffers(1, &dest->al_buffer);
   dest->type = source->type;
@@ -458,9 +458,9 @@ HACKY_COM_BEGIN2(IA3dSource, 5)
   a3d_printf(" this:0x%" PRIX32, stack[1]);
   a3d_printf(" nSize:0x%" PRIX32 "\n", stack[2]);
 
-  A3DSOURCE* this = Memory(stack[1]);
-  this->size_data = stack[2];
-  this->data = Allocate(this->size_data);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
+  This->size_data = stack[2];
+  This->data = Allocate(This->size_data);
 
   eax = 0;
 HACKY_COM_END2(2)
@@ -472,8 +472,8 @@ HACKY_COM_BEGIN2(IA3dSource, 7)
   a3d_printf(" this:0x%" PRIX32, stack[1]);
   a3d_printf(" pWaveFormat:0x%" PRIX32 "\n", stack[2]);
 
-  A3DSOURCE* this = Memory(stack[1]);
-  memcpy(&this->fmt, Memory(stack[2]), sizeof(API(WAVEFORMATEX)));
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
+  memcpy(&This->fmt, Memory(stack[2]), sizeof(API(WAVEFORMATEX)));
 
   eax = 0;
   //esp += 2 * 4;
@@ -484,10 +484,10 @@ HACKY_COM_BEGIN2(IA3dSource, 10)
   a3d_printf("IA3dSource::GetType");
   a3d_printf(" this:0x%" PRIX32, stack[1]);
 
-  A3DSOURCE* this = Memory(stack[1]);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
 
-  a3d_printf(" dwType:=0x%" PRIX32 "\n", this->type);
-  *(uint32_t*)Memory(stack[2]) = this->type;
+  a3d_printf(" dwType:=0x%" PRIX32 "\n", This->type);
+  *(uint32_t*)Memory(stack[2]) = This->type;
 
   eax = 0;
   //esp += 2 * 4;
@@ -502,11 +502,11 @@ HACKY_COM_BEGIN2(IA3dSource, 11)
 
   assert(stack[8] == 0);
 
-  A3DSOURCE* this = Memory(stack[1]);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
   uint32_t dwWriteCursor = stack[2];
 
   //FIXME: assert that the requested length is shorter than the buffer len etc.
-  Address pvAudioPtr1 = this->data + dwWriteCursor;
+  Address pvAudioPtr1 = This->data + dwWriteCursor;
   uint32_t dwAudioBytes1 = stack[3];
   a3d_printf(" pvAudioPtr1:=0x%" PRIX32, pvAudioPtr1);
   *(Address*)Memory(stack[4]) = pvAudioPtr1;
@@ -536,20 +536,20 @@ HACKY_COM_BEGIN2(IA3dSource, 12)
   a3d_printf(" pvAudioPtr2:0x%" PRIX32, stack[4]);
   a3d_printf(" dwNumBytes2:0x%" PRIX32 "\n", stack[5]);
 
-  A3DSOURCE* this = Memory(stack[1]);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
   ALenum al_format; 
-  if (this->fmt.nChannels == 1) {
-    if (this->fmt.wBitsPerSample == 8) {
+  if (This->fmt.nChannels == 1) {
+    if (This->fmt.wBitsPerSample == 8) {
       al_format = AL_FORMAT_MONO8;
-    } else if (this->fmt.wBitsPerSample == 16) {
+    } else if (This->fmt.wBitsPerSample == 16) {
       al_format = AL_FORMAT_MONO16;
     } else {
       assert(false);
     }
-  } else if (this->fmt.nChannels == 2) {
-    if (this->fmt.wBitsPerSample == 8) {
+  } else if (This->fmt.nChannels == 2) {
+    if (This->fmt.wBitsPerSample == 8) {
       al_format = AL_FORMAT_STEREO8;
-    } else if (this->fmt.wBitsPerSample == 16) {
+    } else if (This->fmt.wBitsPerSample == 16) {
       al_format = AL_FORMAT_STEREO16;
     } else {
       assert(false);
@@ -558,21 +558,21 @@ HACKY_COM_BEGIN2(IA3dSource, 12)
     assert(false);
   }
 
-  assert(this->fmt.wFormatTag == 0x0001);
-  assert(this->fmt.nBlockAlign == (this->fmt.nChannels * this->fmt.wBitsPerSample / 8));
+  assert(This->fmt.wFormatTag == 0x0001);
+  assert(This->fmt.nBlockAlign == (This->fmt.nChannels * This->fmt.wBitsPerSample / 8));
 
   Address pvAudioPtr1 = stack[2];
   uint32_t dwNumBytes1 = stack[3];
-  assert(pvAudioPtr1 >= this->data && pvAudioPtr1 < this->data + this->size_data);
+  assert(pvAudioPtr1 >= This->data && pvAudioPtr1 < This->data + This->size_data);
 
-  //alBufferData(this->al_buffer, al_format, Memory(pvAudioPtr1), dwNumBytes1, this->fmt.nSamplesPerSec);
-  alBufferData(this->al_buffer, al_format, Memory(this->data), this->size_data, this->fmt.nSamplesPerSec);
+  //alBufferData(This->al_buffer, al_format, Memory(pvAudioPtr1), dwNumBytes1, This->fmt.nSamplesPerSec);
+  alBufferData(This->al_buffer, al_format, Memory(This->data), This->size_data, This->fmt.nSamplesPerSec);
 
   //FIXME: assert that this source isn't already playing etc.
   ALint status;
-  alGetSourcei(this->al_source, AL_SOURCE_STATE, &status);
+  alGetSourcei(This->al_source, AL_SOURCE_STATE, &status);
   //if (status != AL_PLAYING) {
-    alSourcei(this->al_source, AL_BUFFER, this->al_buffer);
+    alSourcei(This->al_source, AL_BUFFER, This->al_buffer);
   //}
   assert(stack[4] == 0);
   assert(stack[5] == 0);
@@ -589,12 +589,12 @@ HACKY_COM_BEGIN2(IA3dSource, 13)
 
   bool looped = stack[2] == A3D_LOOPED;
 
-  A3DSOURCE* this = Memory(stack[1]);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
   ALint status;
-  //alGetSourcei(this->al_source, AL_SOURCE_STATE, &status);
+  //alGetSourcei(This->al_source, AL_SOURCE_STATE, &status);
   //if (status != AL_PLAYING) {
-    alSourcei(this->al_source, AL_LOOPING, looped);
-    alSourcePlay(this->al_source);
+    alSourcei(This->al_source, AL_LOOPING, looped);
+    alSourcePlay(This->al_source);
   //}
   eax = 0;
   //esp += 2 * 4;
@@ -605,8 +605,8 @@ HACKY_COM_BEGIN2(IA3dSource, 14)
   a3d_printf("IA3dSource::Stop");
   a3d_printf(" this:0x%" PRIX32 "\n", stack[1]);
 
-  A3DSOURCE* this = Memory(stack[1]);
-  alSourceStop(this->al_source);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
+  alSourceStop(This->al_source);
   eax = 0;
   //esp += 1 * 4;
 HACKY_COM_END2(1)
@@ -616,8 +616,8 @@ HACKY_COM_BEGIN2(IA3dSource, 15)
   a3d_printf("IA3dSource::Rewind");
   a3d_printf(" this:0x%" PRIX32 "\n", stack[1]);
 
-  A3DSOURCE* this = Memory(stack[1]);
-  alSourcei(this->al_source, AL_BYTE_OFFSET, 0);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
+  alSourcei(This->al_source, AL_BYTE_OFFSET, 0);
   eax = 0;
   //esp += 1 * 4;
 HACKY_COM_END2(1)
@@ -628,8 +628,8 @@ HACKY_COM_BEGIN(IA3dSource, 18)
     hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
     hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-    A3DSOURCE* this = Memory(stack[1]);
-    alSourcei(this->al_source, AL_BYTE_OFFSET, stack[2]);
+    A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
+    alSourcei(This->al_source, AL_BYTE_OFFSET, stack[2]);
 
     eax = 0;
     esp += 2 << 2;
@@ -641,9 +641,9 @@ HACKY_COM_BEGIN2(IA3dSource, 19)
     a3d_printf("IA3dSource::GetWavePosition");
     a3d_printf(" this:0x%" PRIX32, stack[1]);
 
-    A3DSOURCE* this = Memory(stack[1]);
+    A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
     ALint pos;
-    alGetSourcei(this->al_source, AL_BYTE_OFFSET, &pos); // AL_BYTE_OFFSET or AL_SAMPLE_OFFSET ?
+    alGetSourcei(This->al_source, AL_BYTE_OFFSET, &pos); // AL_BYTE_OFFSET or AL_SAMPLE_OFFSET ?
 
     a3d_printf(" dwOffset:=0x%" PRIX32 "\n", pos);
     *(uint32_t*)Memory(stack[2]) = pos;
@@ -693,8 +693,8 @@ HACKY_COM_BEGIN2(IA3dSource, 40)
   float fval = *(float*)&stack[2];
   a3d_printf(" fGain:%f\n", fval);
 
-  A3DSOURCE* this = Memory(stack[1]);
-  alSourcef(this->al_source, AL_GAIN, fval);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
+  alSourcef(This->al_source, AL_GAIN, fval);
 
   eax = 0;
   //esp += 2 * 4;
@@ -708,8 +708,8 @@ HACKY_COM_BEGIN2(IA3dSource, 42)
   float fval = *(float*)&stack[2];
   a3d_printf(" fPitch:%f\n", fval);
 
-  A3DSOURCE* this = Memory(stack[1]);
-  alSourcef(this->al_source, AL_PITCH, fval);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
+  alSourcef(This->al_source, AL_PITCH, fval);
 
   eax = 0;
   //esp += 2 * 4;
@@ -752,11 +752,11 @@ HACKY_COM_BEGIN2(IA3dSource, 56)
   a3d_printf(" this:0x%" PRIX32, stack[1]);
 
   uint32_t dwStatus = 0;
-  A3DSOURCE* this = Memory(stack[1]);
+  A3DSOURCE* This = (A3DSOURCE*)Memory(stack[1]);
   ALint status;
-  alGetSourcei(this->al_source, AL_SOURCE_STATE, &status);
+  alGetSourcei(This->al_source, AL_SOURCE_STATE, &status);
   if (status == AL_PLAYING) dwStatus |= A3DSTATUS_PLAYING;
-  alGetSourcei(this->al_source, AL_LOOPING, &status);
+  alGetSourcei(This->al_source, AL_LOOPING, &status);
   if (status == AL_TRUE) dwStatus |= A3DSTATUS_LOOPING;
 
   a3d_printf("dwStatus:=0x%" PRIX32 "\n", dwStatus);

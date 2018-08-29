@@ -7,6 +7,8 @@
 #include "../main.h"
 #include "../emulation.h"
 #include "dinput.h"
+#include <string.h>
+
 
 #if 0
 
@@ -150,8 +152,8 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
     *(uint32_t*)Memory(esp) = c; // pvRef
 
     Address ddiAddress = Allocate(sizeof(API(DIDEVICEINSTANCEA)));
-    API(DIDEVICEINSTANCEA)* ddi = Memory(ddiAddress);
-    memset(ddi, 0x00, sizeof(API(DIDEVICEINSTANCEA)));
+    API(DIDEVICEINSTANCEA)* ddi = (API(DIDEVICEINSTANCEA)*) Memory(ddiAddress);
+    memset((void*)ddi, 0x00, sizeof(API(DIDEVICEINSTANCEA)));
 
     ddi->dwSize = sizeof(API(DIDEVICEINSTANCEA));
     //FIXME:    GUID guidInstance;

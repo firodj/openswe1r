@@ -9,13 +9,9 @@
 
 #include "emulation.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct {
     const char* name;
-    void(*callback)(void*, Address, void*);
+    ExportCallback callback;
     Address address;
     Address thunkAddress;
     int hook; // hook type, 1:HLT, 2:INT
@@ -48,8 +44,8 @@ static inline int LogSilent(const char* fmt, ...) { return 0;
 #define my_printf LogPrintf
 
 Address CreateInterface(const char* name, unsigned int slotCount, uint32_t objectSize);
-void AddExport(const char* name, void* callback, Address address);
-void AddExport2(const char* name, void* callback);
+void AddExport(const char* name, ExportCallback callback, Address address);
+void AddExport2(const char* name, ExportCallback callback);
 Export* LookupExportByName(const char* name);
 char* TranslatePath(const char* path);
 
@@ -77,21 +73,21 @@ char* TranslatePath(const char* path);
 #endif
 
 #define HACKY_IMPORT_BEGIN(_name) \
-  static void Hook_ ## _name (void* uc, Address _address, void* _user_data); \
+  static void Hook_ ## _name (uc_engine* uc, Address _address, void* _user_data); \
   INITIALIZER(Register_ ## _name) { \
     const char* name = #_name; \
     info_printf("Registering hook for '%s'\n", name); \
     AddExport(name, Hook_ ## _name, 0); \
   } \
-  static void Hook_ ## _name (void* uc, Address _address, void* _user_data) { \
+  static void Hook_ ## _name (uc_engine* uc, Address _address, void* _user_data) { \
     bool silent = false; \
     \
     int eip; \
-    uc_reg_read(uc, UC_X86_REG_EIP, &eip); \
+    uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip); \
     int esp; \
-    uc_reg_read(uc, UC_X86_REG_ESP, &esp); \
+    uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp); \
     int eax; \
-    uc_reg_read(uc, UC_X86_REG_EAX, &eax); \
+    uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax); \
     \
     Address stackAddress = esp; \
     uint32_t* stack = (uint32_t*)Memory(stackAddress); \
@@ -114,43 +110,39 @@ char* TranslatePath(const char* path);
     } \
     callId++; \
     \
-    uc_reg_write(uc, UC_X86_REG_ESP, &esp); \
-    uc_reg_write(uc, UC_X86_REG_EIP, &eip); \
-    uc_reg_write(uc, UC_X86_REG_EAX, &eax); \
+    uc_reg_write(uc, UC_X86_REG_ESP, (void*)&esp); \
+    uc_reg_write(uc, UC_X86_REG_EIP, (void*)&eip); \
+    uc_reg_write(uc, UC_X86_REG_EAX, (void*)&eax); \
   }
 
 #define HACKY_COM_BEGIN(interface, slot) HACKY_IMPORT_BEGIN(interface ## __ ## slot)
 #define HACKY_COM_END() HACKY_IMPORT_END()
 
 #define HACKY_IMPORT_BEGIN2(_name) \
-  static void Hook_ ## _name (void* uc, Address _address, void* _user_data); \
+  static void Hook_ ## _name (uc_engine* uc, Address _address, void* _user_data); \
   INITIALIZER(Register_ ## _name) { \
     const char* name = #_name; \
     info_printf("Registering hook for '%s'\n", name); \
     AddExport2(name, Hook_ ## _name); \
   } \
-  static void Hook_ ## _name (void* uc, Address _address, void* _user_data) { \
+  static void Hook_ ## _name (uc_engine* uc, Address _address, void* _user_data) { \
     int32_t eax, esp; \
-    uc_reg_read(uc, UC_X86_REG_ESP, &esp); \
-    uc_reg_read(uc, UC_X86_REG_EAX, &eax); \
+    uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp); \
+    uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax); \
     uint32_t* stack = (uint32_t*)Memory(esp); \
     Address returnAddress = stack[0]; \
 
 #define HACKY_IMPORT_END2(nargs) \
     if (nargs) { \
        esp += nargs << 2; \
-       uc_reg_write(uc, UC_X86_REG_ESP, &esp); \
+       uc_reg_write(uc, UC_X86_REG_ESP, (void*)&esp); \
        stack = (uint32_t*)Memory(esp); \
        stack[0] = returnAddress; \
     } \
-    uc_reg_write(uc, UC_X86_REG_EAX, &eax); \
+    uc_reg_write(uc, UC_X86_REG_EAX, (void*)&eax); \
   }
 
 #define HACKY_COM_BEGIN2(interface, slot) HACKY_IMPORT_BEGIN2(interface ## __ ## slot)
 #define HACKY_COM_END2(nargs) HACKY_IMPORT_END2(nargs)
-
-#ifdef __cplusplus
-};
-#endif
 
 #endif

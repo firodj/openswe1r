@@ -12,6 +12,7 @@
 
 #include "emulation.h"
 
+    
 typedef uint32_t API(DWORD);
 typedef void API(VOID);
 
@@ -94,7 +95,7 @@ static int sprintf_ucs2(uint16_t* str, const char* fmt, ...) {
   va_end(args);
 
   // Copy string
-  char* tmp = malloc(ret + 1);
+  char* tmp = (char*)malloc(ret + 1);
   va_start(args, fmt);
   ret = vsprintf(tmp, fmt, args);
   va_end(args);
@@ -111,6 +112,5 @@ static void strcpy_ucs2(uint16_t* dest, uint16_t* src) {
     *dest++ = *src;
   } while(*src++ != 0);
 }
-
-
+    
 #endif

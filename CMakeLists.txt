@@ -3,7 +3,7 @@ project(OpenSWE1R)
 
 option(USE_VM "Use hardware virtualization backend for Unicorn-Engine" OFF)
 
-
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
@@ -29,24 +29,24 @@ include_directories(SYSTEM
 )
 
 add_executable(openswe1r
-  main.c
-  emulation.c
-  export.c
-  shader.c
+  main.cpp
+  emulation.cpp
+  export.cpp
+  shader.cpp
 
-  dll/kernel32.c
-  dll/user32.c
-  dll/gdi32.c
-  dll/advapi32.c
-  dll/ole32.c
-  dll/wsock32.c
-  dll/smush.c
+  dll/kernel32.cpp
+  dll/user32.cpp
+  dll/gdi32.cpp
+  dll/advapi32.cpp
+  dll/ole32.cpp
+  dll/wsock32.cpp
+  dll/smush.cpp
 
-  com/a3d.c
-  com/dplay.c
-  com/dinput.c
-  com/ddraw.c
-  com/d3d.c
+  com/a3d.cpp
+  com/dplay.cpp
+  com/dinput.cpp
+  com/ddraw.cpp
+  com/d3d.cpp
 
   main.h
   emulation.h

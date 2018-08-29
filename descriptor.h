@@ -2,6 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
+#ifndef __OPENSWE1R_DESCRIPTOR_H__
+#define __OPENSWE1R_DESCRIPTOR_H__
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -55,3 +58,5 @@ static SegmentDescriptor CreateDescriptor(uint32_t base, uint32_t limit, bool co
 
   return descriptor;
 }
+ 
+#endif

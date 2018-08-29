@@ -35,35 +35,35 @@ uint32_t callId = 0;
 unsigned int exportCount = 0;
 Export* exports = NULL;
 
-void AddExport(const char* name, void* callback, Address address) {
-  exports = realloc(exports, (exportCount + 1) * sizeof(Export));
-  Export* export = &exports[exportCount];
-  export->name = malloc(strlen(name) + 1);
-  strcpy((char*)export->name, name);
-  export->callback = callback;
-  export->address = address;
-  export->thunkAddress = 0;
-  export->hook = 1;
+void AddExport(const char* name, ExportCallback callback, Address address) {
+  exports = (Export*)realloc(exports, (exportCount + 1) * sizeof(Export));
+  Export* export_sym = &exports[exportCount];
+  export_sym->name = (const char*)malloc(strlen(name) + 1);
+  strcpy((char*)export_sym->name, name);
+  export_sym->callback = callback;
+  export_sym->address = address;
+  export_sym->thunkAddress = 0;
+  export_sym->hook = 1;
   exportCount++;
 }
 
-void AddExport2(const char* name, void* callback) {
-  exports = realloc(exports, (exportCount + 1) * sizeof(Export));
-  Export* export = &exports[exportCount];
-  export->name = malloc(strlen(name) + 1);
-  strcpy((char*)export->name, name);
-  export->callback = callback;
-  export->address = 0;
-  export->thunkAddress = 0;
-  export->hook = 2;
+void AddExport2(const char* name, ExportCallback callback) {
+  exports = (Export*)realloc(exports, (exportCount + 1) * sizeof(Export));
+  Export* export_sym = &exports[exportCount];
+  export_sym->name = (const char*)malloc(strlen(name) + 1);
+  strcpy((char*)export_sym->name, name);
+  export_sym->callback = callback;
+  export_sym->address = 0;
+  export_sym->thunkAddress = 0;
+  export_sym->hook = 2;
   exportCount++;
 }
 
 Export* LookupExportByName(const char* name) {
   for(unsigned int i = 0; i < exportCount; i++) {
-    Export* export = &exports[i];
-    if (!strcmp(export->name, name)) {
-      return export;
+    Export* export_sym = &exports[i];
+    if (!strcmp(export_sym->name, name)) {
+      return export_sym;
     }
   }
   return NULL;
@@ -95,7 +95,7 @@ uint32_t tls[1000] = {0};
 // HACK:
 #include <unicorn/unicorn.h>
 
-static void UnknownImport(void* uc, Address address, void* user_data);
+static void UnknownImport(uc_engine* uc, Address address, void* user_data);
 
 
 Address CreateInterface(const char* name, unsigned int slotCount, uint32_t objectSize) {
@@ -105,23 +105,23 @@ Address CreateInterface(const char* name, unsigned int slotCount, uint32_t objec
   uint32_t* vtable = (uint32_t*)Memory(vtableAddress);
   for(unsigned int i = 0; i < slotCount; i++) {
     // Point addresses to themself
-    char* slotName = malloc(128);
+    char* slotName = (char*)malloc(128);
     sprintf(slotName, "%s__%d", name, i);
-    Export* export = LookupExportByName(slotName);
+    Export* export_sym = LookupExportByName(slotName);
 
     Address hltAddress;
-    if (export != NULL) {
-      if (export->address == 0) {
+    if (export_sym != NULL) {
+      if (export_sym->address == 0) {
         hltAddress = CreateHlt();
-        AddHltHandler(hltAddress, export->callback, (void*)slotName);
-        export->address = hltAddress;
+        AddHltHandler(hltAddress, export_sym->callback, (void*)slotName);
+        export_sym->address = hltAddress;
       } else {
-        hltAddress = export->address;
+        hltAddress = export_sym->address;
       }
     } else {
       hltAddress = CreateHlt();
       AddHltHandler(hltAddress, UnknownImport, (void*)slotName);
-      AddExport(slotName, UnknownImport, hltAddress);
+      AddExport((const char*)slotName, UnknownImport, hltAddress);
     }
     vtable[i] = hltAddress;
   }
@@ -136,7 +136,7 @@ const char* exeName = "swep1rcr.exe";
 
 char* TranslatePath(const char* path) {
   size_t length = strlen(path) + 1;
-  char* newPath = malloc(length);
+  char* newPath = (char*)malloc(length);
   char* cursor = strcpy(newPath, path);
   while(*cursor != '\0') {
     if (*cursor == '\\') {
@@ -252,19 +252,19 @@ void UnloadSection(Exe* exe, unsigned int sectionIndex) {
 
 
 static void UcTimerHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
-  info_printf("Time is %" PRIu64 "\n", SDL_GetTicks());
+  info_printf("Time is %" PRIu64 "\n", GetTicks());
 }
 
 // This is strictly for debug purposes, it attempts to dump fscanf (internally used by sscanf too)
-static void UcFscanfHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
+static void UcFscanfHook(uc_engine* uc, uint64_t address, uint32_t size, void* user_data) {
   info_printf("\nfscanf\n\n");
 
   int eip;
-  uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip);
   int esp;
-  uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp);
   int eax;
-  uc_reg_read(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax);
   
   Address stackAddress = esp;
   uint32_t* stack = (uint32_t*)Memory(stackAddress);
@@ -285,8 +285,8 @@ static void UcFscanfHook(void* uc, uint64_t address, uint32_t size, void* user_d
   // Pop the return address
   Address returnAddress = stack[0];
   info_printf("Return at 0x%" PRIX32 "\n", returnAddress);
-  _iobuf* iob = Memory(stack[1]); // Get FILE object
-  char* buf = Memory(iob->_ptr);
+  _iobuf* iob = (_iobuf*)Memory(stack[1]); // Get FILE object
+  char* buf = (char*)Memory(iob->_ptr);
   info_printf("stream: 0x%" PRIX32 " ('%.100s...')\n", stack[1], buf);
   char* fmt = (char*)Memory(stack[2]);
   info_printf("fmt: 0x%" PRIX32 " ('%s')\n", stack[2], fmt);
@@ -327,18 +327,22 @@ static void UcFscanfHook(void* uc, uint64_t address, uint32_t size, void* user_d
 
 }
 
+
+
+
+
 // This is strictly for debug purposes, it attempts to add messages to the log in case of the weird-crash
-static void UcCrashHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
+static void UcCrashHook(uc_engine* uc, uint64_t address, uint32_t size, void* user_data) {
   int eip;
-  uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip);
   int esp;
-  uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp);
   int eax;
-  uc_reg_read(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax);
   int ecx;
-  uc_reg_read(uc, UC_X86_REG_ECX, &ecx);
+  uc_reg_read(uc, UC_X86_REG_ECX, (void*)&ecx);
   int edi;
-  uc_reg_read(uc, UC_X86_REG_EDI, &edi);
+  uc_reg_read(uc, UC_X86_REG_EDI, (void*)&edi);
   
   Address stackAddress = esp;
   uint32_t* stack = (uint32_t*)Memory(stackAddress);
@@ -510,7 +514,7 @@ HACKY_IMPORT_BEGIN(GetKeyNameTextA)
   hacky_printf("lParam 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpString 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
   hacky_printf("cchSize %" PRIu32 "\n", stack[3]);
-  eax = snprintf(Memory(stack[2]), stack[3], "k%" PRIu32, stack[1]); // Cancel was selected
+  eax = snprintf((char*)Memory(stack[2]), stack[3], "k%" PRIu32, stack[1]); // Cancel was selected
   esp += 3 * 4;
 HACKY_IMPORT_END()
 
@@ -519,7 +523,7 @@ HACKY_IMPORT_END()
 //Winmm.lib
 HACKY_IMPORT_BEGIN(timeGetTime)
   //FIXME: Avoid overflow?
-  eax = SDL_GetTicks();
+  eax = GetTicks();
 HACKY_IMPORT_END()
 
 
@@ -538,7 +542,7 @@ HACKY_IMPORT_BEGIN(MessageBoxA)
   hacky_printf("lpText 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
   hacky_printf("lpCaption 0x%" PRIX32 " ('%s')\n", stack[3], (char*)Memory(stack[3]));
   hacky_printf("uType 0x%" PRIX32 "\n", stack[4]);
-  SDL_Delay(5000);
+  //SDL_Delay(5000);
   eax = 2; // Cancel was selected
   esp += 4 * 4;
 HACKY_IMPORT_END()
@@ -727,7 +731,7 @@ HACKY_IMPORT_BEGIN(RegQueryValueExA)
   // Patch to accept the CD
   if (!strcmp((char*)Memory(stack[2]), "CD Path")) {
     //FIXME: Assert that there is enough room for the path
-    strcpy(Memory(stack[5]), "D:");
+    strcpy((char*)Memory(stack[5]), "D:");
     eax = 0; // ERROR_SUCCESS
   } else {
     eax = 2; // ERROR_FILE_NOT_FOUND
@@ -816,7 +820,7 @@ HACKY_IMPORT_BEGIN(StretchBlt)
 
   // Get the pointer to the object the DC points at, we'll assume that it is a BITMAP
   Address objectAddress = *(Address*)Memory(stack[6]);
-  API(BITMAP)* bitmap = Memory(objectAddress);
+  API(BITMAP)* bitmap = (API(BITMAP)*) Memory(objectAddress);
   void* data = Memory(bitmap->bmBits);
 
   // Update the texture interface
@@ -1286,7 +1290,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 8)
 
     esp -= 4;
     Address descAddress = Allocate(sizeof(API(DDSURFACEDESC2)));
-    API(DDSURFACEDESC2)* desc = Memory(descAddress);
+    API(DDSURFACEDESC2)* desc = (API(DDSURFACEDESC2)*) Memory(descAddress);
     desc->ddpfPixelFormat.dwFlags = API(DDPF_RGB);
     desc->ddpfPixelFormat.dwRGBBitCount = 16;
     desc->dwWidth = 640;
@@ -1328,8 +1332,8 @@ HACKY_COM_BEGIN(IDirectDraw4, 11)
 // (+60)
 
 #if 1
-  API(DDCAPS)* halCaps = Memory(stack[2]);
-  API(DDCAPS)* swCaps = Memory(stack[3]);
+  API(DDCAPS)* halCaps = (API(DDCAPS)* ) Memory(stack[2]);
+  API(DDCAPS)* swCaps = (API(DDCAPS)* ) Memory(stack[3]);
 
   info_printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
 
@@ -1414,15 +1418,15 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 0)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
   const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
   info_printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
          iid->Data1, iid->Data2, iid->Data3,
          iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
          iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
   if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
-    info_printf("Returning texture 0x%" PRIX32 "\n", this->texture);
-    *(Address*)Memory(stack[3]) = this->texture;
+    info_printf("Returning texture 0x%" PRIX32 "\n", This->texture);
+    *(Address*)Memory(stack[3]) = This->texture;
   } else {
     assert(false);
   }
@@ -1464,9 +1468,9 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
   hacky_printf("d 0x%08" PRIX32 "\n", d);
   hacky_printf("e 0x%" PRIX32 "\n", e);
 
-  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
 
-  API(DDBLTFX)* bltfx = Memory(e);
+  API(DDBLTFX)* bltfx = (API(DDBLTFX)*) Memory(e);
 
   assert((d & ~(API(DDBLT_COLORFILL) | API(DDBLT_WAIT) | API(DDBLT_DEPTHFILL))) == 0);
 
@@ -1475,11 +1479,11 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
   }
 
   if (d & API(DDBLT_COLORFILL)) {
-    assert(!(this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)));
+    assert(!(This->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)));
 
     //FIXME: Why is this zero during startup?!
-    if (this->desc.ddpfPixelFormat.dwRGBBitCount != 0) {
-      assert(this->desc.ddpfPixelFormat.dwRGBBitCount == 16);
+    if (This->desc.ddpfPixelFormat.dwRGBBitCount != 0) {
+      assert(This->desc.ddpfPixelFormat.dwRGBBitCount == 16);
     }
 
     glClearColor(((bltfx->dwFillColor >> 11) & 0x1F) / 31.0f,
@@ -1490,8 +1494,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
   }
 
   if (d & API(DDBLT_DEPTHFILL)) {
-    assert(this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER));
-    assert(this->desc.ddpfPixelFormat.dwZBufferBitDepth == 16);
+    assert(This->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER));
+    assert(This->desc.ddpfPixelFormat.dwZBufferBitDepth == 16);
 
     glDepthMask(GL_TRUE);
     assert(bltfx->dwFillDepth = 0xFFFF);
@@ -1563,9 +1567,9 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 17)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
-  if (this->texture != 0) {
-    API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(this->texture);
+  API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  if (This->texture != 0) {
+    API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(This->texture);
     info_printf("Returning GL tex handle %d\n", texture->handle);
     *(Address*)Memory(stack[2]) = texture->handle;
   } else {
@@ -1597,37 +1601,37 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
 
-  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
 
   assert(stack[2] == 0);
   assert(stack[5] == 0);
 
   //Hack: Part 1: check if we already have this surface in RAM
-  if (this->desc.lpSurface == 0) {
-    this->desc.lpSurface = Allocate(this->desc.dwHeight * this->desc.lPitch);
-    memset(Memory(this->desc.lpSurface), 0x77, this->desc.dwHeight * this->desc.lPitch);
+  if (This->desc.lpSurface == 0) {
+    This->desc.lpSurface = Allocate(This->desc.dwHeight * This->desc.lPitch);
+    memset(Memory(This->desc.lpSurface), 0x77, This->desc.dwHeight * This->desc.lPitch);
   }
 
 
-  if (this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
-    assert(this->desc.lPitch == 2 * this->desc.dwWidth);
+  if (This->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
+    assert(This->desc.lPitch == 2 * This->desc.dwWidth);
 
-    uint8_t* pixel_buffer = Memory(this->desc.lpSurface);
-    glReadPixels(0, 0, this->desc.dwWidth, this->desc.dwHeight, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, pixel_buffer);
+    uint8_t* pixel_buffer = (uint8_t*)Memory(This->desc.lpSurface);
+    glReadPixels(0, 0, This->desc.dwWidth, This->desc.dwHeight, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, pixel_buffer);
 
     // Reserve a buffer for swapping lines during image flipping
     static size_t line_buffer_size = 0;
     static uint8_t* line_buffer = NULL;
-    size_t line_size = this->desc.dwWidth * 2;
+    size_t line_size = This->desc.dwWidth * 2;
     if (line_size > line_buffer_size) {
-      line_buffer = realloc(line_buffer, line_size);
+      line_buffer = (uint8_t*)realloc(line_buffer, line_size);
       line_buffer_size = line_size;
     }
 
     // Do the vertical flip
-    for(unsigned int i = 0; i < this->desc.dwHeight / 2; i++) {
-      uint8_t* line_a = &pixel_buffer[this->desc.lPitch * i];
-      uint8_t* line_b = &pixel_buffer[this->desc.lPitch * (this->desc.dwHeight - 1 - i)];
+    for(unsigned int i = 0; i < This->desc.dwHeight / 2; i++) {
+      uint8_t* line_a = (uint8_t*)&pixel_buffer[This->desc.lPitch * i];
+      uint8_t* line_b = (uint8_t*)&pixel_buffer[This->desc.lPitch * (This->desc.dwHeight - 1 - i)];
       memcpy(line_buffer, line_a, line_size);
       memcpy(line_a, line_b, line_size);
       memcpy(line_b, line_buffer, line_size);
@@ -1636,8 +1640,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   }
 
 
-  API(DDSURFACEDESC2)* desc = Memory(stack[3]);
-  memcpy(desc, &this->desc, sizeof(API(DDSURFACEDESC2)));
+  API(DDSURFACEDESC2)* desc = (API(DDSURFACEDESC2)*)Memory(stack[3]);
+  memcpy(desc, &This->desc, sizeof(API(DDSURFACEDESC2)));
   
   info_printf("%d x %d (pitch: %d); bpp = %d; at 0x%08X\n", desc->dwWidth, desc->dwHeight, desc->lPitch, desc->ddpfPixelFormat.dwRGBBitCount, desc->lpSurface);
 #if 0
@@ -1667,11 +1671,11 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
 
   assert(stack[2] == 0);
 
-  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
 
-  API(DDSURFACEDESC2)* desc = &this->desc;
+  API(DDSURFACEDESC2)* desc = &This->desc;
 
-  API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(this->texture);
+  API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(This->texture);
 
   GLint previousTexture = 0;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
@@ -1919,7 +1923,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 0)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
   const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
   info_printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
      iid->Data1, iid->Data2, iid->Data3,
@@ -1927,8 +1931,8 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 0)
      iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
   #if 0
   if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
-  info_printf("Returning texture 0x%" PRIX32 "\n", this->texture);
-  *(Address*)Memory(stack[3]) = this->texture;
+  info_printf("Returning texture 0x%" PRIX32 "\n", This->texture);
+  *(Address*)Memory(stack[3]) = This->texture;
   } else {
   assert(false);
   }
@@ -2170,12 +2174,12 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 22)
 
     case API(D3DRENDERSTATE_SRCBLEND):
       assert(b == API(D3DBLEND_SRCALPHA)); // D3DBLEND
-      srcBlend = mapBlend(b);
+      srcBlend = mapBlend((API(D3DBLEND))b);
       break;
 
     case API(D3DRENDERSTATE_DESTBLEND):
       assert(b == API(D3DBLEND_INVSRCALPHA)); // D3DBLEND
-      destBlend = mapBlend(b);
+      destBlend = mapBlend((API(D3DBLEND))b);
       break;
 
     case API(D3DRENDERSTATE_TEXTUREMAPBLEND):
@@ -2268,7 +2272,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 25)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   uint32_t a = stack[2];
-  float* m = Memory(stack[3]);
+  float* m = (float*)Memory(stack[3]);
   switch(a) {
     case 3: // Projection
       memcpy(projectionMatrix, m, 4 * 4 * sizeof(float));
@@ -2336,7 +2340,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 38)
   hacky_printf("b 0x%" PRIX32 "\n", b);
 
   if (b != 0) {
-    API(Direct3DTexture2)* texture = Memory(b);
+    API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*) Memory(b);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->handle);
   } else {
@@ -2424,8 +2428,8 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 0)
   //FIXME: Add more classed / interfaces
 
   if (!strcmp(iidString, "0B2B8630-AD35-11D0-8EA6-00609797EA5B")) {
-    API(Direct3DTexture2)* this = Memory(stack[1]);
-    *(Address*)Memory(stack[3]) = this->surface;
+    API(Direct3DTexture2)* This = (API(Direct3DTexture2)*)Memory(stack[1]);
+    *(Address*)Memory(stack[3]) = This->surface;
   } else {
     assert(false);
   }
@@ -2457,10 +2461,10 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 5)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-  API(Direct3DTexture2)* this = Memory(stack[1]);
-  API(Direct3DTexture2)* a = Memory(stack[2]);
+  API(Direct3DTexture2)* This = (API(Direct3DTexture2)*) Memory(stack[1]);
+  API(Direct3DTexture2)* a = (API(Direct3DTexture2)*) Memory(stack[2]);
   //FIXME: Dirty hack..
-  this->handle = a->handle;
+  This->handle = a->handle;
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
 HACKY_COM_END()
@@ -2509,7 +2513,7 @@ HACKY_COM_BEGIN(IDirect3DViewport3, 20)
   hacky_printf("f 0x%" PRIX32 "\n", stack[7]);
 
   unsigned int rectCount = stack[2];
-  API(D3DRECT)* rects = Memory(stack[3]);
+  API(D3DRECT)* rects = (API(D3DRECT)*) Memory(stack[3]);
 
   glEnable(GL_SCISSOR_TEST);
   GLint viewport[4];
@@ -2766,13 +2770,13 @@ HACKY_IMPORT_END()
 
 
 
-static void UcMallocHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
+static void UcMallocHook(uc_engine* uc, uint64_t address, uint32_t size, void* user_data) {
   int eip;
-  uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip);
   int esp;
-  uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp);
   int eax;
-  uc_reg_read(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax);
   
   Address stackAddress = esp;
   uint32_t* stack = (uint32_t*)Memory(stackAddress);
@@ -2784,20 +2788,20 @@ static void UcMallocHook(void* uc, uint64_t address, uint32_t size, void* user_d
   eax = Allocate(stack[1]);
   info_printf("malloc(%d) -> 0x%08X\n", stack[1], eax);
 
-  uc_reg_write(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_write(uc, UC_X86_REG_EAX, (void*)&eax);
   eip = returnAddress;
-  uc_reg_write(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_write(uc, UC_X86_REG_EIP, (void*)&eip);
   esp += 4;
-  uc_reg_write(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_write(uc, UC_X86_REG_ESP, (void*)&esp);
 }
 
-static void UcFreeHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
+static void UcFreeHook(uc_engine* uc, uint64_t address, uint32_t size, void* user_data) {
   int eip;
-  uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip);
   int esp;
-  uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp);
   int eax;
-  uc_reg_read(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax);
   
   Address stackAddress = esp;
   uint32_t* stack = (uint32_t*)Memory(stackAddress);
@@ -2810,23 +2814,23 @@ static void UcFreeHook(void* uc, uint64_t address, uint32_t size, void* user_dat
   Free(stack[1]);
 
   eax = 0;
-  uc_reg_write(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_write(uc, UC_X86_REG_EAX, (void*)&eax);
   eip = returnAddress;
-  uc_reg_write(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_write(uc, UC_X86_REG_EIP, (void*)&eip);
   esp += 4;
-  uc_reg_write(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_write(uc, UC_X86_REG_ESP, (void*)&esp);
 }
 
 
 // Some TGA loading function
 
-static void UcTGAHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
+static void UcTGAHook(uc_engine* uc, uint64_t address, uint32_t size, void* user_data) {
   int eip;
-  uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip);
   int esp;
-  uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp);
   int eax;
-  uc_reg_read(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax);
   
   Address stackAddress = esp;
   uint32_t* stack = (uint32_t*)Memory(stackAddress);
@@ -2840,9 +2844,9 @@ static void UcTGAHook(void* uc, uint64_t address, uint32_t size, void* user_data
 
   // Emulate instruction we overwrote
   eax = stack[1];
-  uc_reg_write(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_write(uc, UC_X86_REG_EAX, (void*)&eax);
   eip = 0x48a234;
-  uc_reg_write(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_write(uc, UC_X86_REG_EIP, (void*)&eip);
 }
 
 
@@ -2851,13 +2855,13 @@ static void UcTGAHook(void* uc, uint64_t address, uint32_t size, void* user_data
 
 
 // Callback for tracing instructions
-static void UnknownImport(void* uc, Address address, void* user_data) {
+static void UnknownImport(uc_engine* uc, Address address, void* user_data) {
   int eip;
-  uc_reg_read(uc, UC_X86_REG_EIP, &eip);
+  uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip);
   int esp;
-  uc_reg_read(uc, UC_X86_REG_ESP, &esp);
+  uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp);
   int eax;
-  uc_reg_read(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_read(uc, UC_X86_REG_EAX, (void*)&eax);
   
   Address stackAddress = esp;
   uint32_t* stack = (uint32_t*)Memory(stackAddress);
@@ -2884,9 +2888,9 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
 
   assert(false);
 
-  uc_reg_write(uc, UC_X86_REG_ESP, &esp);
-  uc_reg_write(uc, UC_X86_REG_EIP, &eip);
-  uc_reg_write(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_write(uc, UC_X86_REG_ESP, (void*)&esp);
+  uc_reg_write(uc, UC_X86_REG_EIP, (void*)&eip);
+  uc_reg_write(uc, UC_X86_REG_EAX, (void*)&eax);
 }
 
 // This loads the exe into memory, even on Linux
@@ -2923,12 +2927,12 @@ Exe* LoadExe(const char* path) {
   sys_printf("Entry point: 0x%" PRIX32 "\n", exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint);
 
   //FIXME: Parse data dictionaries
-  exe->dataDirectories = malloc(exe->peHeader.numberOfRvaAndSizes * sizeof(PeDataDirectory));
+  exe->dataDirectories = (PeDataDirectory*) malloc(exe->peHeader.numberOfRvaAndSizes * sizeof(PeDataDirectory));
   fread(exe->dataDirectories, exe->peHeader.numberOfRvaAndSizes, sizeof(PeDataDirectory), exe->f);
 
   // Load sections
-  exe->mappedSections = malloc(exe->coffHeader.numberOfSections * sizeof(uint8_t*));
-  exe->sections = malloc(exe->coffHeader.numberOfSections * sizeof(PeSection));
+  exe->mappedSections = (uint8_t**)malloc(exe->coffHeader.numberOfSections * sizeof(uint8_t*));
+  exe->sections = (PeSection*)malloc(exe->coffHeader.numberOfSections * sizeof(PeSection));
   for(unsigned int sectionIndex = 0; sectionIndex < exe->coffHeader.numberOfSections; sectionIndex++) {
     PeSection* section = &exe->sections[sectionIndex];
 
@@ -2961,12 +2965,12 @@ Exe* LoadExe(const char* path) {
     uint32_t remainingSize = exe->dataDirectories[5].size;
 
     while(remainingSize >= sizeof(API(IMAGE_BASE_RELOCATION))) {
-      API(IMAGE_BASE_RELOCATION)* baseRelocation = Memory(relocationRva);
+      API(IMAGE_BASE_RELOCATION)* baseRelocation = (API(IMAGE_BASE_RELOCATION)*) Memory(relocationRva);
       assert(baseRelocation->sizeOfBlock >= sizeof(API(IMAGE_BASE_RELOCATION)));
 
       unsigned int relocationCount = (baseRelocation->sizeOfBlock - sizeof(API(IMAGE_BASE_RELOCATION))) / 2;
       sys_printf("Base relocation: 0x%" PRIX32 " (%d relocations)\n", baseRelocation->virtualAddress, relocationCount);
-      uint16_t* relocations = Memory(relocationRva);
+      uint16_t* relocations = (uint16_t*) Memory(relocationRva);
       for(unsigned int i = 0; i < relocationCount; i++) {
         uint16_t relocation = relocations[i];
         unsigned int type = relocation >> 12;
@@ -3003,13 +3007,13 @@ Exe* LoadExe(const char* path) {
     while(remainingSize >= sizeof(API(IMAGE_IMPORT_DESCRIPTOR))) {
 
       // Access import and check if it is valid
-      API(IMAGE_IMPORT_DESCRIPTOR)* imports = Memory(importRva);
+      API(IMAGE_IMPORT_DESCRIPTOR)* imports = (API(IMAGE_IMPORT_DESCRIPTOR)*) Memory(importRva);
       if (IsZero(imports, sizeof(API(IMAGE_IMPORT_DESCRIPTOR)))) {
         break;
       }
 
       // Dump imports
-      const char* name = Memory(exe->peHeader.imageBase + imports->name);
+      const char* name = (const char*)Memory(exe->peHeader.imageBase + imports->name);
       //FIXME: Bound checking?
       uint32_t originalThunkAddress = exe->peHeader.imageBase + imports->originalFirstThunk;
       uint32_t thunkAddress = exe->peHeader.imageBase + imports->firstThunk;
@@ -3026,19 +3030,19 @@ Exe* LoadExe(const char* path) {
         if (importByNameAddress & 0x80000000) {
           unsigned int ordinal = importByNameAddress & 0x7FFFFFFF;
           sys_printf("  0x%" PRIX32 ": @%" PRIu32 " ..", thunkAddress, ordinal);
-          label = malloc(128);
+          label = (char*) malloc(128);
           sprintf(label, "<%s@%d>", name, ordinal);
         } else {
-          API(IMAGE_IMPORT_BY_NAME)* importByName = Memory(exe->peHeader.imageBase + importByNameAddress);
+          API(IMAGE_IMPORT_BY_NAME)* importByName = (API(IMAGE_IMPORT_BY_NAME)*) Memory(exe->peHeader.imageBase + importByNameAddress);
           sys_printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' ..", thunkAddress, importByName->hint, importByName->name);
           label = importByName->name;
         }
 
-        Export* export = NULL;
+        Export* export_sym = NULL;
         if (importByNameAddress & 0x80000000) {
-          export = LookupExportByOrdinal(name, importByNameAddress & 0x7FFFFFFF);
+          export_sym = LookupExportByOrdinal(name, importByNameAddress & 0x7FFFFFFF);
         } else {
-          export = LookupExportByName(label);
+          export_sym = LookupExportByName(label);
         }
 
         //FIXME: This is a hack.. these calls were WAY too slow because UC is really bad at switching contexts
@@ -3062,7 +3066,7 @@ Exe* LoadExe(const char* path) {
 #endif
         {
           
-          if (export == NULL) {
+          if (export_sym == NULL) {
             Address hltAddress = CreateHlt();
             AddHltHandler(hltAddress, UnknownImport, (void*)label);
             AddExport(label, UnknownImport, hltAddress);
@@ -3071,9 +3075,9 @@ Exe* LoadExe(const char* path) {
             //FIXME: Report error and assert false
           } else {
             if (true) { //(export->isVariable == false) {
-              Address symAddress = export->hook == 2 ? CreateInt21() : CreateHlt();
-              export->thunkAddress = thunkAddress;
-              AddHltHandler(symAddress, export->callback, (void*)label);
+              Address symAddress = export_sym->hook == 2 ? CreateInt21() : CreateHlt();
+              export_sym->thunkAddress = thunkAddress;
+              AddHltHandler(symAddress, export_sym->callback, (void*)label);
               *symbolAddress = symAddress;
               sys_printf("found at 0x%08X\n", symAddress);
             } else {
@@ -3231,7 +3235,7 @@ int main(int argc, char* argv[]) {
   }
 
   clearEax = Allocate(3);
-  uint8_t* p = Memory(clearEax);
+  uint8_t* p = (uint8_t*)Memory(clearEax);
   *p++ = 0x31; *p++ = 0xC0; // xor eax, eax
   *p++ = 0xC3;              // ret
 

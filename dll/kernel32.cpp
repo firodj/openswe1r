@@ -6,7 +6,7 @@
 #include "../windows.h"
 #include "../export.h"
 #include "../emulation.h"
-
+#include <string.h>
 #include <assert.h>
 
 #define API__HEAP_ZERO_MEMORY 0x00000008
@@ -31,6 +31,71 @@ EXPORT_STDCALL(kernel32, API(LPTSTR), GetCommandLineA) { //WINAPI
 // 0x8704F4
 EXPORT_STDCALL(kernel32, API(VOID), GetStartupInfo, API(LPSTARTUPINFO),lpStartupInfo) { //WINAPI
   //lpStartupInfo->
+}
+
+#endif
+
+
+#if defined(__APPLE__)
+
+#include <mach/mach_time.h>
+static uint64_t start_mach;
+mach_timebase_info_data_t mach_base_info;
+static bool ticks_started = false;
+bool has_monotonic_time = false;
+
+void TicksInit(void)
+{
+    if (ticks_started) return;
+    ticks_started = true;
+    
+    kern_return_t ret = mach_timebase_info(&mach_base_info);
+    assert(ret == 0);
+    has_monotonic_time = true;
+}
+
+void TicksQuit(void)
+{
+    ticks_started = false;
+}
+
+uint32_t GetTicks(void)
+{
+    uint32_t ticks;
+    if (!ticks_started) TicksInit();
+    
+    assert(has_monotonic_time);
+    uint64_t now = mach_absolute_time();
+    ticks = (uint32_t)((((now - start_mach) * mach_base_info.numer) / mach_base_info.denom) / 1000000);
+
+    return (ticks);
+}
+
+bool GetPerformanceCounter(uint64_t* lpPerformanceCount)
+{
+    uint64_t ticks;
+    if (!ticks_started) TicksInit();
+    
+    assert(has_monotonic_time);
+    ticks = mach_absolute_time();
+
+    *lpPerformanceCount = ticks;
+    return (ticks);
+}
+
+bool GetPerformanceFrequency(uint64_t* lpFrequency)
+{
+    if (!ticks_started) TicksInit();
+    
+    assert (has_monotonic_time);
+    uint64_t freq = mach_base_info.denom;
+    
+    freq *= 1000000000;
+    freq /= mach_base_info.numer;
+    
+    *lpFrequency = freq;
+
+    return true;
 }
 
 #endif
@@ -66,7 +131,7 @@ HACKY_IMPORT_BEGIN2(HeapAlloc)
   //my_printf(" => 0x%" PRIX32 "\n", eax);
 
   if (stack[2] & API(HEAP_ZERO_MEMORY)) {
-    memset(Memory(eax), 0x00, stack[3]);
+    memset((void*)Memory(eax), 0x00, stack[3]);
   }
 HACKY_IMPORT_END2(3)
 
@@ -244,19 +309,19 @@ HACKY_IMPORT_END()
 //Kernel32.lib
 HACKY_IMPORT_BEGIN(GetProcAddress)
   Address lpProcName = stack[2];
-  const char* procName = Memory(lpProcName);
+  const char* procName = (const char*)Memory(lpProcName);
   hacky_printf("hModule 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lpProcName 0x%" PRIX32 " ('%s')\n", lpProcName, procName);
 
-  Export* export = LookupExportByName(procName);
-  if (export == NULL) {
+  Export* export_sym = LookupExportByName(procName);
+  if (export_sym == NULL) {
     info_printf("Export for '%s' could not be found\n", procName);
     eax = 0;
     assert(false);
   } else {
     //FIXME: Use existing address for export
     Address hltAddress = CreateHlt();
-    AddHltHandler(hltAddress, export->callback, (void*)procName);
+    AddHltHandler(hltAddress, export_sym->callback, (void*)procName);
     eax = hltAddress;
     info_printf("Providing at 0x%08X\n", hltAddress);
   }
@@ -277,14 +342,6 @@ HACKY_IMPORT_BEGIN(SetUnhandledExceptionFilter)
   // (Only used in 1207 revolt.exe CRT)
   hacky_printf("lpTopLevelExceptionFilter 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // Previous handler (NULL = none existed)
-  esp += 1 * 4;
-HACKY_IMPORT_END()
-
-//Kernel32.lib
-HACKY_IMPORT_BEGIN(QueryPerformanceCounter)
-  hacky_printf("lpPerformanceCount 0x%" PRIX32 "\n", stack[1]);
-  *(uint64_t*)Memory(stack[1]) = SDL_GetPerformanceCounter();
-  eax = 1; // nonzero if succeeds
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
@@ -310,7 +367,7 @@ HACKY_IMPORT_BEGIN(GetComputerNameA)
   hacky_printf("lpBuffer 0x%" PRIX32 "\n", stack[1]);
   uint32_t* size = (uint32_t*)Memory(stack[2]);
   hacky_printf("lpnSize 0x%" PRIX32 " (%" PRIu32 ")\n", stack[2], *size);
-  *size = snprintf(Memory(stack[1]), *size, "ComputerName"); // Cancel was selected
+  *size = snprintf((char*)Memory(stack[1]), *size, "ComputerName"); // Cancel was selected
   eax = 1; // nonzero if succeeds
   esp += 2 * 4;
 HACKY_IMPORT_END()
@@ -480,12 +537,19 @@ HACKY_IMPORT_BEGIN(SetFilePointer)
 HACKY_IMPORT_END()
 
 //Kernel32.lib
-HACKY_IMPORT_BEGIN(QueryPerformanceFrequency)
-  hacky_printf("lpFrequency 0x%" PRIX32 "\n", stack[1]);
-  *(uint64_t*)Memory(stack[1]) = SDL_GetPerformanceFrequency();
-  eax = 1; // BOOL - but doc: hardware supports a high-resolution performance counter = nonzero return
-  esp += 1 * 4;
-HACKY_IMPORT_END()
+HACKY_IMPORT_BEGIN2(QueryPerformanceCounter)
+  //hacky_printf("lpPerformanceCount 0x%" PRIX32 "\n", stack[1]);
+  eax = GetPerformanceCounter((uint64_t*)Memory(stack[1]));
+  //esp += 1 * 4;
+HACKY_IMPORT_END2(1)
+
+//Kernel32.lib
+HACKY_IMPORT_BEGIN2(QueryPerformanceFrequency)
+  //hacky_printf("lpFrequency 0x%" PRIX32 "\n", stack[1]);
+  eax = GetPerformanceFrequency((uint64_t*)Memory(stack[1]));
+  // BOOL - but doc: hardware supports a high-resolution performance counter = nonzero return
+  //esp += 1 * 4;
+HACKY_IMPORT_END2(1)
 
 // Thread related
 //Kernel32.lib
@@ -689,8 +753,8 @@ HACKY_IMPORT_BEGIN(FindFirstFileA)
   hacky_printf("lpFileName 0x%" PRIX32 " ('%s')\n", stack[1], pattern);
   hacky_printf("lpFindFileData 0x%" PRIX32 "\n", stack[2]);
 //dwFileAttributes
-  char* wildcard1 = strchr(pattern, '*');
-  char* wildcard2 = strchr(pattern, '?');
+  const char* wildcard1 = strchr(pattern, '*');
+  const char* wildcard2 = strchr(pattern, '?');
   if ((wildcard1 == NULL) && (wildcard2 == NULL)) {
     // It's asking explicitly for one file..
     static char foundFile[128];
@@ -717,11 +781,11 @@ HACKY_IMPORT_BEGIN(FindFirstFileA)
     const char* none[] = { NULL };
     dirlisting = none;
     info_printf("Unknown pattern: '%s'\n", pattern);
-    SDL_Delay(3000);
+    //SDL_Delay(3000);
   }
 
   if (*dirlisting) {
-    API(WIN32_FIND_DATA)* data = Memory(stack[2]);
+    API(WIN32_FIND_DATA)* data = (API(WIN32_FIND_DATA)*) Memory(stack[2]);
     data->dwFileAttributes = strchr(*dirlisting,'.') ? 0x80 : 0x10; // FILE_ATTRIBUTE_NORMAL or FILE_ATTRIBUTE_DIRECTORY
     sprintf(data->cFileName, "%s", *dirlisting);
     dirlisting++;
@@ -739,7 +803,7 @@ HACKY_IMPORT_BEGIN(FindNextFileA)
   hacky_printf("lpFindFileData 0x%" PRIX32 "\n", stack[2]);
 
   if (*dirlisting) {
-    API(WIN32_FIND_DATA)* data = Memory(stack[2]);
+    API(WIN32_FIND_DATA)* data = (API(WIN32_FIND_DATA)*) Memory(stack[2]);
     data->dwFileAttributes = strchr(*dirlisting,'.') ? 0x80 : 0x10; // FILE_ATTRIBUTE_NORMAL or FILE_ATTRIBUTE_DIRECTORY
     sprintf(data->cFileName, "%s", *dirlisting);
     dirlisting++;
@@ -799,7 +863,7 @@ HACKY_IMPORT_BEGIN(GetVolumeInformationA)
   hacky_printf("lpFileSystemNameBuffer 0x%" PRIX32 "\n", stack[7]);
   hacky_printf("nFileSystemNameSize %" PRIu32 "\n", stack[8]);
 
-  strcpy(Memory(stack[2]), "racer100_0");
+  strcpy((char*)Memory(stack[2]), "racer100_0");
 
   eax = 1; // BOOL, non-zero means all requested info was available
   esp += 8 * 4;

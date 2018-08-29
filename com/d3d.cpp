@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
+#include "../main.h"
 #include "../emulation.h"
 
 typedef struct {

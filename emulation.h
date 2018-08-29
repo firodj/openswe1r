@@ -60,6 +60,8 @@ void CleanupEmulation();
 
 void RunEmulation();
 
+typedef void(*ExportCallback)(uc_engine* uc, Address _address, void* _user_data);
+
 // Memory API
 
 void MapMemory(void* data, uint32_t address, uint32_t size, bool read, bool write, bool execute);
@@ -70,7 +72,7 @@ void* Memory(uint32_t address);
 // Hook API
 
 Address CreateHlt();
-void AddHltHandler(Address address, void(*callback)(void* uc, Address address, void* user_data), void* user_data);
+void AddHltHandler(Address address, ExportCallback callback, void* user_data);
 Address CreateCallback(void* callback, void* user);
 Address CreateInt(uint32_t intno, uint32_t eax);
 Address CreateInt21();

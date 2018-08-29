@@ -236,12 +236,12 @@ HACKY_COM_BEGIN(IDirectPlay4, 12)
 
       esp -= 4;
       Address lpNameAddr = Allocate(sizeof(API(DPNAME)));
-      API(DPNAME)* lpName = Memory(lpNameAddr);
+      API(DPNAME)* lpName = (API(DPNAME)*) Memory(lpNameAddr);
       memset(lpName, 0x00, sizeof(API(DPNAME)));
       lpName->dwSize = sizeof(API(DPNAME));
       Address str = Allocate(128);
       //FIXME: max length
-      sprintf_ucs2(Memory(str), "OpenSWE1R Player %d", i);
+      sprintf_ucs2((uint16_t*)Memory(str), "OpenSWE1R Player %d", i);
       lpName->lpszShortName = str;
       lpName->lpszLongName = str;
       *(uint32_t*)Memory(esp) = lpNameAddr; // lpName
@@ -304,11 +304,11 @@ HACKY_COM_BEGIN(IDirectPlay4, 13)
       *(uint32_t*)Memory(esp) = Allocate(4); // lpdwTimeOut
 
       Address lpThisSD = Allocate(sizeof(API(DPSESSIONDESC2)));
-      API(DPSESSIONDESC2)* s = Memory(lpThisSD);
+      API(DPSESSIONDESC2)* s = (API(DPSESSIONDESC2)*) Memory(lpThisSD);
       memset(s, 0x00, sizeof(API(DPSESSIONDESC2)));
       s->dwSize = sizeof(API(DPSESSIONDESC2));
       s->lpszSessionName = Allocate(128);
-      sprintf_ucs2(Memory(s->lpszSessionName), "OpenSWE1R Session %d:foo\n", i);
+      sprintf_ucs2((uint16_t*)Memory(s->lpszSessionName), "OpenSWE1R Session %d:foo\n", i);
 
       esp -= 4;
       *(uint32_t*)Memory(esp) = lpThisSD; // lpThisSD
@@ -335,7 +335,7 @@ HACKY_COM_BEGIN(IDirectPlay4, 22)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", a);
   hacky_printf("b 0x%" PRIX32 "\n", b);
-  uint32_t* size = Memory(b);
+  uint32_t* size = (uint32_t*) Memory(b);
   printf("Size was %" PRIu32 "\n", *size);
   if ((a == 0) || (*size < sizeof(API(DPSESSIONDESC2)))) {
     *size = sizeof(API(DPSESSIONDESC2));
@@ -354,10 +354,10 @@ static void copySession(API(DPSESSIONDESC2)* dest, API(DPSESSIONDESC2)* src, boo
   if (copy_strings) {
     // Fixup pointers:
     dest->lpszSessionName = Allocate(128);
-    strcpy_ucs2(Memory(dest->lpszSessionName), Memory(src->lpszSessionName));
+    strcpy_ucs2((uint16_t*)Memory(dest->lpszSessionName), (uint16_t*)Memory(src->lpszSessionName));
     if (dest->lpszPassword != 0) {
       dest->lpszPassword = Allocate(128);
-      strcpy_ucs2(Memory(dest->lpszPassword), Memory(src->lpszPassword));
+      strcpy_ucs2((uint16_t*)Memory(dest->lpszPassword), (uint16_t*)Memory(src->lpszPassword));
     }
   }
 }
@@ -370,9 +370,9 @@ HACKY_COM_BEGIN(IDirectPlay4, 31)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", a);
   hacky_printf("b 0x%" PRIX32 "\n", b);
-  API(DPSESSIONDESC2)* desc = Memory(a);
+  API(DPSESSIONDESC2)* desc = (API(DPSESSIONDESC2)*) Memory(a);
 
-  copySession(&globalDesc, Memory(a), true);
+  copySession(&globalDesc, (API(DPSESSIONDESC2)*) Memory(a), true);
 
   eax = 0;
   esp += 3 * 4;
@@ -396,7 +396,7 @@ enum {
   if (b == API(DPOPEN_JOIN)) {
     //FIXME: Set session to "good" values?
   } else if (b == API(DPOPEN_CREATE)) {
-    copySession(&globalDesc, Memory(a), true);
+    copySession(&globalDesc, (API(DPSESSIONDESC2)*) Memory(a), true);
   } else {
     assert(false);
   }
@@ -469,11 +469,11 @@ HACKY_COM_BEGIN(IDirectPlay4, 35)
 
     esp -= 4;
     Address lpNameAddr = Allocate(sizeof(API(DPNAME)));
-    API(DPNAME)* lpName = Memory(lpNameAddr);
+    API(DPNAME)* lpName = (API(DPNAME)* ) Memory(lpNameAddr);
     memset(lpName, 0x00, sizeof(API(DPNAME)));
     lpName->dwSize = sizeof(API(DPNAME));
     Address str = Allocate(128);
-    sprintf_ucs2(Memory(str), "OpenSWE1R Connection");
+    sprintf_ucs2((uint16_t*) Memory(str), "OpenSWE1R Connection");
     lpName->lpszShortName = str;
     lpName->lpszLongName = str;
     *(uint32_t*)Memory(esp) = lpNameAddr; // lpName
@@ -488,7 +488,7 @@ HACKY_COM_BEGIN(IDirectPlay4, 35)
 
     //FIXME: Use proper GUID
     Address lpguidSP = Allocate(sizeof(API(IID)));
-    API(IID)* iid = Memory(lpguidSP);
+    API(IID)* iid = (API(IID)*) Memory(lpguidSP);
 
     // DPSPGUID_IPX = {685BC400-9D2C-11cf-A9CD-00AA006886E3}
     iid->Data1 = 0x685BC400;

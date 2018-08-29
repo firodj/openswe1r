@@ -8,11 +8,11 @@
 #include <stdbool.h>
 
 #include <glad/glad.h>
-
+    
 void PrintShaderLog(GLuint shader);
 void PrintShaderProgramLog(GLuint program);
 GLuint CreateShaderProgram(GLuint vertexShader, GLuint fragmentShader);
 bool LinkShaderProgram(GLuint program);
 GLuint CreateShader(const char* src, GLuint type);
-
+        
 #endif
