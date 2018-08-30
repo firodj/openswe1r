@@ -11,10 +11,9 @@
 #include <string.h>
 #include <assert.h>
 
-#include "SDL.h"
+#include "GLFW/glfw3.h"
 
-
-extern SDL_Window* sdlWindow;
+extern GLFWwindow* glfwWindow;
 
 #if 0
 
@@ -296,7 +295,8 @@ HACKY_COM_BEGIN(IDirectDraw4, 10)
   hacky_printf("FlipToGDISurface\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
 
-  SDL_GL_SwapWindow(sdlWindow);
+  //SDL_GL_SwapWindow(sdlWindow);
+  glfwSwapBuffers(glfwWindow);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
@@ -508,7 +508,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 11)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
 
-  SDL_GL_SwapWindow(sdlWindow);
+  //SDL_GL_SwapWindow(sdlWindow);
+  glfwSwapBuffers(glfwWindow);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;

@@ -76,6 +76,7 @@ void AddHltHandler(Address address, ExportCallback callback, void* user_data);
 Address CreateCallback(void* callback, void* user);
 Address CreateInt(uint32_t intno, uint32_t eax);
 Address CreateInt21();
+Address CreateDispatchMessage();
 
 // Thread API
 ThreadContext *GetCurrentThreadContext();

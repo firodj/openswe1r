@@ -13,6 +13,9 @@
 #include "ddraw.h"
 #include "d3d.h"
 
+#include <GLFW/glfw3.h>
+
+extern GLFWwindow* glfwWindow;
 
 #if 0
 
@@ -410,45 +413,45 @@ HACKY_COM_END()
 
 // IDirect3D3 -> STDMETHOD(CreateViewport)(THIS_ LPDIRECT3DVIEWPORT3*,LPUNKNOWN) PURE; // 6
 HACKY_COM_BEGIN(IDirect3D3, 6)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-*(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 200, 100);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  *(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 200, 100);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
 HACKY_COM_END()
 
 // IDirect3D3 -> STDMETHOD(CreateDevice)(THIS_ REFCLSID,LPDIRECTDRAWSURFACE4,LPDIRECT3DDEVICE3*,LPUNKNOWN) PURE; // 8
 HACKY_COM_BEGIN(IDirect3D3, 8)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
-hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-*(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 200, 100);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 5 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
+  hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
+  *(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 200, 100);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 5 * 4;
 HACKY_COM_END()
 
 // IDirect3D3 -> STDMETHOD(EnumZBufferFormats)(THIS_ REFCLSID,LPD3DENUMPIXELFORMATSCALLBACK,LPVOID) PURE; // 10
 HACKY_COM_BEGIN(IDirect3D3, 10)
-hacky_printf("EnumZBufferFormats\n");
-uint32_t b = stack[3];
-uint32_t c = stack[4];
-info_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", b);
-hacky_printf("c 0x%" PRIX32 "\n", c);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 4 * 4;
-// Push a call to the callback onto the stack.. this is some ugly hack..
+  hacky_printf("EnumZBufferFormats\n");
+  uint32_t b = stack[3];
+  uint32_t c = stack[4];
+  info_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", b);
+  hacky_printf("c 0x%" PRIX32 "\n", c);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 4 * 4;
+  // Push a call to the callback onto the stack.. this is some ugly hack..
 
-// Convention not specified -> stdcall?!
+  // Convention not specified -> stdcall?!
 
-esp -= 4;
-*(uint32_t*)Memory(esp) = returnAddress;
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
 
-{
+  {
     Address formatAddress = Allocate(sizeof(API(DDPIXELFORMAT)));
     API(DDPIXELFORMAT)* format = (API(DDPIXELFORMAT)*)Memory(formatAddress);
     format->dwSize = sizeof(API(DDPIXELFORMAT));
@@ -466,100 +469,87 @@ esp -= 4;
     eip = b;
     info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
-}
+  }
 HACKY_COM_END()
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 // IDirect3DDevice3 -> STDMETHOD(QueryInterface)(THIS_ REFIID riid, LPVOID * ppvObj) PURE; // 0
 HACKY_COM_BEGIN(IDirect3DDevice3, 0)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
-const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
-info_printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  API(DirectDrawSurface4)* This = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
+  info_printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
             iid->Data1, iid->Data2, iid->Data3,
             iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
             iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
 #if 0
-if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
+  if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
     info_printf("Returning texture 0x%" PRIX32 "\n", This->texture);
     *(Address*)Memory(stack[3]) = This->texture;
-} else {
+  } else {
     assert(false);
-}
+  }
 #endif
-assert(false);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
+  assert(false);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirect3DDevice3, 2)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 1 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(GetCaps)(THIS_ LPD3DDEVICEDESC,LPD3DDEVICEDESC) PURE; // 3
 HACKY_COM_BEGIN(IDirect3DDevice3, 3)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
 
-API(D3DDEVICEDESC)* desc = (API(D3DDEVICEDESC)*)Memory(stack[2]);
-uint32_t size = desc->dwSize;
-memset(desc, 0x00, size);
-desc->dwSize = size;
-desc->dpcTriCaps.dwTextureBlendCaps = 0;
-desc->dpcTriCaps.dwTextureBlendCaps |= API(D3DPTBLENDCAPS_MODULATEALPHA);
+  API(D3DDEVICEDESC)* desc = (API(D3DDEVICEDESC)*)Memory(stack[2]);
+  uint32_t size = desc->dwSize;
+  memset(desc, 0x00, size);
+  desc->dwSize = size;
+  desc->dpcTriCaps.dwTextureBlendCaps = 0;
+  desc->dpcTriCaps.dwTextureBlendCaps |= API(D3DPTBLENDCAPS_MODULATEALPHA);
 
-desc->dpcTriCaps.dwTextureBlendCaps = 0;
-desc->dpcTriCaps.dwRasterCaps |= API(D3DPRASTERCAPS_FOGTABLE);
+  desc->dpcTriCaps.dwTextureBlendCaps = 0;
+  desc->dpcTriCaps.dwRasterCaps |= API(D3DPRASTERCAPS_FOGTABLE);
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(AddViewport)(THIS_ LPDIRECT3DVIEWPORT3) PURE; // 5
 HACKY_COM_BEGIN(IDirect3DDevice3, 5)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 2 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 2 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(EnumTextureFormats)(THIS_ LPD3DENUMPIXELFORMATSCALLBACK,LPVOID) PURE; // 8
 HACKY_COM_BEGIN(IDirect3DDevice3, 8)
-hacky_printf("EnumTextureFormats\n");
-uint32_t a = stack[2];
-uint32_t b = stack[3];
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", a);
-hacky_printf("b 0x%" PRIX32 "\n", b);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
-// Push a call to the callback onto the stack.. this is some ugly hack..
+  hacky_printf("EnumTextureFormats\n");
+  uint32_t a = stack[2];
+  uint32_t b = stack[3];
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", a);
+  hacky_printf("b 0x%" PRIX32 "\n", b);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
+  // Push a call to the callback onto the stack.. this is some ugly hack..
 
-// Convention not specified -> stdcall?!
+  // Convention not specified -> stdcall?!
 
-esp -= 4;
-*(uint32_t*)Memory(esp) = returnAddress;
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
 
-{
+  {
     {
         Address formatAddress = Allocate(sizeof(API(DDPIXELFORMAT)));
         API(DDPIXELFORMAT)* format = (API(DDPIXELFORMAT)*)Memory(formatAddress);
@@ -631,29 +621,29 @@ esp -= 4;
     
     info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
-}
+  }
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(BeginScene)(THIS) PURE; // 9
 HACKY_COM_BEGIN(IDirect3DDevice3, 9)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 1 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(EndScene)(THIS) PURE; // 10
 HACKY_COM_BEGIN(IDirect3DDevice3, 10)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 1 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(SetCurrentViewport)(THIS_ LPDIRECT3DVIEWPORT3) PURE; // 12
 HACKY_COM_BEGIN(IDirect3DDevice3, 12)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 2 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 2 * 4;
 HACKY_COM_END()
 
 static void glSet(GLenum state, bool set) {
@@ -678,15 +668,15 @@ GLenum mapBlend(API(D3DBLEND) blend) {
 
 // IDirect3DDevice3 -> STDMETHOD(SetRenderState)(THIS_ D3DRENDERSTATETYPE,DWORD) PURE; // 22
 HACKY_COM_BEGIN(IDirect3DDevice3, 22)
-silent = false;
-if (!silent) {
+  silent = false;
+  if (!silent) {
     hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
     hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
     hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-}
-uint32_t a = stack[2];
-uint32_t b = stack[3];
-switch(a) {
+  }
+  uint32_t a = stack[2];
+  uint32_t b = stack[3];
+  switch(a) {
     case API(D3DRENDERSTATE_TEXTUREHANDLE):
         assert(b == 0); // Texture handle for legacy interfaces (Texture,Texture2)
         // FIXME
@@ -826,19 +816,19 @@ switch(a) {
         info_printf("Unknown render-state %d set to 0x%08" PRIX32 " (%f)\n", a, b, *(float*)&b);
         assert(false);
         break;
-}
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
+  }
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(SetTransform)(THIS_ D3DTRANSFORMSTATETYPE,LPD3DMATRIX) PURE; // 25
 HACKY_COM_BEGIN(IDirect3DDevice3, 25)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-uint32_t a = stack[2];
-float* m = (float*)Memory(stack[3]);
-switch(a) {
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  uint32_t a = stack[2];
+  float* m = (float*)Memory(stack[3]);
+  switch(a) {
     case 3: // Projection
         memcpy(projectionMatrix, m, 4 * 4 * sizeof(float));
         break;
@@ -846,92 +836,91 @@ switch(a) {
         info_printf("Unknown matrix %d\n", a);
         //FIXME: assert(false) once this runs faster
         break;
-}
-info_printf("Matrix %d:\n", a);
-info_printf("  %f\t%f\t%f\t%f\n", m[ 0], m[ 1], m[ 2], m[ 3]);
-info_printf("  %f\t%f\t%f\t%f\n", m[ 4], m[ 5], m[ 6], m[ 7]);
-info_printf("  %f\t%f\t%f\t%f\n", m[ 8], m[ 9], m[10], m[11]);
-info_printf("  %f\t%f\t%f\t%f\n", m[12], m[13], m[14], m[15]);
+  }
+  info_printf("Matrix %d:\n", a);
+  info_printf("  %f\t%f\t%f\t%f\n", m[ 0], m[ 1], m[ 2], m[ 3]);
+  info_printf("  %f\t%f\t%f\t%f\n", m[ 4], m[ 5], m[ 6], m[ 7]);
+  info_printf("  %f\t%f\t%f\t%f\n", m[ 8], m[ 9], m[10], m[11]);
+  info_printf("  %f\t%f\t%f\t%f\n", m[12], m[13], m[14], m[15]);
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
 HACKY_COM_END()
 
 
 // IDirect3DDevice3 -> STDMETHOD(DrawPrimitive)(THIS_ D3DPRIMITIVETYPE,DWORD,LPVOID,DWORD,DWORD) PURE; // 28
 HACKY_COM_BEGIN(IDirect3DDevice3, 28)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a (primitive type) 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b (vertex format = fvf) 0x%" PRIX32 "\n", stack[3]);
-hacky_printf("c (buffer) 0x%" PRIX32 "\n", stack[4]);
-hacky_printf("d (vertex-count) 0x%" PRIX32 "\n", stack[5]);
-hacky_printf("e (flags) 0x%" PRIX32 "\n", stack[6]);
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a (primitive type) 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b (vertex format = fvf) 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("c (buffer) 0x%" PRIX32 "\n", stack[4]);
+  hacky_printf("d (vertex-count) 0x%" PRIX32 "\n", stack[5]);
+  hacky_printf("e (flags) 0x%" PRIX32 "\n", stack[6]);
 
-PrintVertices(stack[3], stack[4], stack[5]);
-LoadVertices(stack[3], stack[4], stack[5]);
-GLenum mode = SetupRenderer(stack[2], stack[3]);
-glDrawArrays(mode, 0, stack[5]);
+  PrintVertices(stack[3], stack[4], stack[5]);
+  LoadVertices(stack[3], stack[4], stack[5]);
+  GLenum mode = SetupRenderer(stack[2], stack[3]);
+  glDrawArrays(mode, 0, stack[5]);
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 6 * 4;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 6 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(DrawIndexedPrimitive)(THIS_ D3DPRIMITIVETYPE,DWORD,LPVOID,DWORD,LPWORD,DWORD,DWORD) PURE; // 29
 HACKY_COM_BEGIN(IDirect3DDevice3, 29)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("d3dptPrimitiveType 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("dwVertexTypeDesc 0x%" PRIX32 "\n", stack[3]);
-hacky_printf("lpvVertices 0x%" PRIX32 "\n", stack[4]);
-hacky_printf("dwVertexCount 0x%" PRIX32 "\n", stack[5]);
-hacky_printf("lpwIndices 0x%" PRIX32 "\n", stack[6]);
-hacky_printf("dwIndexCount 0x%" PRIX32 "\n", stack[7]);
-hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[8]);
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("d3dptPrimitiveType 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("dwVertexTypeDesc 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("lpvVertices 0x%" PRIX32 "\n", stack[4]);
+  hacky_printf("dwVertexCount 0x%" PRIX32 "\n", stack[5]);
+  hacky_printf("lpwIndices 0x%" PRIX32 "\n", stack[6]);
+  hacky_printf("dwIndexCount 0x%" PRIX32 "\n", stack[7]);
+  hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[8]);
 
-LoadIndices(stack[6], stack[7]);
-LoadVertices(stack[3], stack[4], stack[5]);
-GLenum mode = SetupRenderer(stack[2], stack[3]);
-glDrawElements(mode, stack[7], GL_UNSIGNED_SHORT, NULL);
+  LoadIndices(stack[6], stack[7]);
+  LoadVertices(stack[3], stack[4], stack[5]);
+  GLenum mode = SetupRenderer(stack[2], stack[3]);
+  glDrawElements(mode, stack[7], GL_UNSIGNED_SHORT, NULL);
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 8 * 4;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 8 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(SetTexture)(THIS_ DWORD,LPDIRECT3DTEXTURE2) PURE; // 38
 HACKY_COM_BEGIN(IDirect3DDevice3, 38)
-uint32_t a = stack[2];
-uint32_t b = stack[3];
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", a);
-hacky_printf("b 0x%" PRIX32 "\n", b);
+  uint32_t a = stack[2];
+  uint32_t b = stack[3];
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", a);
+  hacky_printf("b 0x%" PRIX32 "\n", b);
 
-if (b != 0) {
+  if (b != 0) {
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*) Memory(b);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->handle);
-} else {
+  } else {
     glBindTexture(GL_TEXTURE_2D, 0); // FIXME: I believe this is supposed to be white?!
     assert(false);
-}
+  }
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
 HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(SetTextureStageState)(THIS_ DWORD,D3DTEXTURESTAGESTATETYPE,DWORD) PURE; // 40
 HACKY_COM_BEGIN(IDirect3DDevice3, 40)
+  uint32_t a = stack[2];
+  uint32_t b = stack[3];
+  uint32_t c = stack[4];
 
-uint32_t a = stack[2];
-uint32_t b = stack[3];
-uint32_t c = stack[4];
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", a);
+  hacky_printf("b 0x%" PRIX32 "\n", b);
+  hacky_printf("c 0x%" PRIX32 "\n", c);
 
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", a);
-hacky_printf("b 0x%" PRIX32 "\n", b);
-hacky_printf("c 0x%" PRIX32 "\n", c);
+  assert(a == 0);
 
-assert(a == 0);
-
-switch(b) {
+  switch(b) {
         
     case API(D3DTSS_ADDRESSU):
         assert((c == API(D3DTADDRESS_WRAP)) || (c == API(D3DTADDRESS_CLAMP))); // D3DTEXTUREADDRESS
@@ -956,134 +945,131 @@ switch(b) {
     default:
         assert(false);
         break;
-}
+  }
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 4 * 4;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 4 * 4;
 HACKY_COM_END()
-
-
-
-
-
-
-
-
 
 
 // IDirect3DTexture2
 
 // IDirect3DTexture2 -> STDMETHOD(QueryInterface)                (THIS_ REFIID, LPVOID FAR *) PURE; // 0
 HACKY_COM_BEGIN(IDirect3DTexture2, 0)
-hacky_printf("QueryInterface\n");
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("QueryInterface\n");
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
 
-const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
+  const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
 
-char iidString[1024];
-sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
+  char iidString[1024];
+  sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
         iid->Data1, iid->Data2, iid->Data3,
         iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
         iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
-info_printf("  (read iid: {%s})\n", iidString);
+  info_printf("  (read iid: {%s})\n", iidString);
 
-char name[32];
-//FIXME: Add more classed / interfaces
+  char name[32];
+  //FIXME: Add more classed / interfaces
 
-if (!strcmp(iidString, "0B2B8630-AD35-11D0-8EA6-00609797EA5B")) {
+  if (!strcmp(iidString, "0B2B8630-AD35-11D0-8EA6-00609797EA5B")) {
     API(Direct3DTexture2)* This = (API(Direct3DTexture2)*)Memory(stack[1]);
     *(Address*)Memory(stack[3]) = This->surface;
-} else {
+  } else {
     assert(false);
-}
+  }
 
-eax = 0;
-esp += 3 * 4;
+  eax = 0;
+  esp += 3 * 4;
 HACKY_COM_END()
 
 
 // IDirect3DTexture2 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirect3DTexture2, 2)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 1 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
 HACKY_COM_END()
 
 // IDirect3DTexture2 -> STDMETHOD(GetHandle)(THIS_ LPDIRECT3DDEVICE2,LPD3DTEXTUREHANDLE) PURE; // 3
 HACKY_COM_BEGIN(IDirect3DTexture2, 3)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-*(uint32_t*)Memory(stack[3]) = 1248;
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 3 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  *(uint32_t*)Memory(stack[3]) = 1248;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
 HACKY_COM_END()
 
 // IDirect3DTexture2 -> STDMETHOD(Load)(THIS_ LPDIRECT3DTEXTURE2) PURE; // 5
 HACKY_COM_BEGIN(IDirect3DTexture2, 5)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-API(Direct3DTexture2)* This = (API(Direct3DTexture2)*) Memory(stack[1]);
-API(Direct3DTexture2)* a = (API(Direct3DTexture2)*) Memory(stack[2]);
-//FIXME: Dirty hack..
-This->handle = a->handle;
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 2 * 4;
+  API(Direct3DTexture2)* This = (API(Direct3DTexture2)*) Memory(stack[1]);
+  API(Direct3DTexture2)* a = (API(Direct3DTexture2)*) Memory(stack[2]);
+  //FIXME: Dirty hack..
+  This->handle = a->handle;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 2 * 4;
 HACKY_COM_END()
-
-
-
-
 
 
 // IDirect3DViewport3
 
 // IDirect3DViewport3 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirect3DViewport3, 2)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 1 * 4;
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 1 * 4;
 HACKY_COM_END()
 
 // IDirect3DViewport3 -> STDMETHOD(SetViewport2)(THIS_ LPD3DVIEWPORT2) PURE; // 17
 HACKY_COM_BEGIN(IDirect3DViewport3, 17)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-API(D3DVIEWPORT2)* vp = (API(D3DVIEWPORT2)*)Memory(stack[2]);
-assert(vp->dwSize == sizeof(API(D3DVIEWPORT2)));
+  hacky_printf("this 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("pViewport 0x%" PRIX32 "\n", stack[2]);
+  API(D3DVIEWPORT2)* vp = (API(D3DVIEWPORT2)*)Memory(stack[2]);
+  assert(vp->dwSize == sizeof(API(D3DVIEWPORT2)));
 
-clipScale[0] = 2.0f / vp->dvClipWidth;
-clipScale[1] = 2.0f / vp->dvClipHeight;
-clipScale[2] = 2.0f / (vp->dvMaxZ - vp->dvMinZ);
-clipOffset[0] = -vp->dvClipX * clipScale[0] - 1.0f;
-clipOffset[1] = -vp->dvClipY * clipScale[1] - 1.0f;
-clipOffset[2] = -vp->dvMinZ * clipScale[2] - 1.0f;
-glViewport(vp->dwX, vp->dwY, vp->dwWidth, vp->dwHeight);
+  // Makesure works with high-DPI
+  int widthf, heightf, widthw, heightw;
+  glfwGetFramebufferSize(glfwWindow, &widthf, &heightf);
+  glfwGetWindowSize(glfwWindow, &widthw, &heightw);
+  float scaleX = (float) widthf / widthw;
+  float scaleY = (float) heightf / heightw;
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 2 * 4;
+  clipScale[0] = 2.0f / vp->dvClipWidth;
+  clipScale[1] = 2.0f / vp->dvClipHeight;
+  clipScale[2] = 2.0f / (vp->dvMaxZ - vp->dvMinZ);
+  clipOffset[0] = -vp->dvClipX * clipScale[0] - 1.0f;
+  clipOffset[1] = -vp->dvClipY * clipScale[1] - 1.0f;
+  clipOffset[2] = -vp->dvMinZ * clipScale[2] - 1.0f;
+
+  glViewport(vp->dwX * scaleX, vp->dwY * scaleY, vp->dwWidth * scaleX, vp->dwHeight * scaleY);
+
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 2 * 4;
 HACKY_COM_END()
 
 // IDirect3DViewport3 -> STDMETHOD(Clear2)(THIS_ DWORD,LPD3DRECT,DWORD,D3DCOLOR,D3DVALUE,DWORD) PURE; // 20
 HACKY_COM_BEGIN(IDirect3DViewport3, 20)
-hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
-hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-hacky_printf("e 0x%" PRIX32 "\n", stack[6]);
-hacky_printf("f 0x%" PRIX32 "\n", stack[7]);
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
+  hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
+  hacky_printf("e 0x%" PRIX32 "\n", stack[6]);
+  hacky_printf("f 0x%" PRIX32 "\n", stack[7]);
 
-unsigned int rectCount = stack[2];
-API(D3DRECT)* rects = (API(D3DRECT)*) Memory(stack[3]);
+  unsigned int rectCount = stack[2];
+  API(D3DRECT)* rects = (API(D3DRECT)*) Memory(stack[3]);
 
-glEnable(GL_SCISSOR_TEST);
-GLint viewport[4];
-glGetIntegerv(GL_VIEWPORT, viewport);
-for(unsigned int i = 0; i < rectCount; i++) {
+  glEnable(GL_SCISSOR_TEST);
+  GLint viewport[4];
+  glGetIntegerv(GL_VIEWPORT, viewport);
+
+  for(unsigned int i = 0; i < rectCount; i++) {
     API(D3DRECT)* rect = &rects[i];
     //FIXME: Clip to viewport..
     int width = rect->x2 - rect->x1;
@@ -1106,11 +1092,11 @@ for(unsigned int i = 0; i < rectCount; i++) {
     glClear(((flags & API(D3DCLEAR_TARGET)) ? GL_COLOR_BUFFER_BIT : 0) |
             ((flags & API(D3DCLEAR_ZBUFFER)) ? GL_DEPTH_BUFFER_BIT : 0) |
             ((flags & API(D3DCLEAR_STENCIL)) ? GL_STENCIL_BUFFER_BIT : 0));
-}
-glDisable(GL_SCISSOR_TEST);
+  }
+  glDisable(GL_SCISSOR_TEST);
 
-eax = 0; // FIXME: No idea what this expects to return..
-esp += 7 * 4;
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 7 * 4;
 HACKY_COM_END()
 
 

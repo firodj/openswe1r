@@ -14,10 +14,12 @@
 
     
 typedef uint32_t API(DWORD);
-typedef void API(VOID);
+typedef void API(VOID); // Beware of void*, shoulde be as Address
 
+typedef int32_t API(LONG); // FIXME: Assumption
 typedef uint32_t API(UINT); // FIXME: Assumption
 typedef int16_t API(SHORT); // FIXME: Assumption
+
 
 typedef struct {
   uint32_t Data1;
@@ -83,6 +85,49 @@ enum {
   API(VK_LMENU) = 0xA4,
   API(VK_RMENU) = 0xA5
 };
+
+typedef struct tagPOINT {
+    API(LONG) x;
+    API(LONG) y;
+} API(POINT);
+
+typedef struct tagMSG {
+    uint32_t   hwnd;
+    API(UINT)   message;
+    uint32_t wParam;
+    uint32_t lParam;
+    API(DWORD)  time;
+    API(POINT)  pt;
+    API(DWORD)  lPrivate;
+} API(MSG);
+
+typedef struct tagWNDCLASSA {
+  API(UINT)  style;
+  Address    lpfnWndProc;
+  int32_t    cbClsExtra;
+  int32_t    cbWndExtra;
+  uint32_t   hInstance;
+  uint32_t   hIcon;
+  uint32_t   hCursor;
+  uint32_t   hbrBackground;
+  Address    lpszMenuName;
+  Address    lpszClassName;
+} API(WNDCLASSA);
+
+typedef struct tagWNDCLASSEXA {
+  API(UINT)  cbSize;
+  API(UINT)  style;
+  Address     lpfnWndProc;
+  int32_t    cbClsExtra;
+  int32_t    cbWndExtra;
+  uint32_t   hInstance;
+  uint32_t   hIcon;
+  uint32_t   hCursor;
+  uint32_t   hbrBackground;
+  Address    lpszMenuName;
+  Address    lpszClassName;
+  uint32_t   hIconSm;
+} API(WNDCLASSEXA);
 
 #define API__CREATE_SUSPENDED  0x00000004
 

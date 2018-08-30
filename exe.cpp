@@ -238,6 +238,11 @@ Exe* LoadExe(const char* path) {
           *symbolAddress = codeAddress;
           sys_printf("EnterCriticalSection, LeaveCriticalSection patched\n");
         } else
+        if (!strcmp("DispatchMessageA", label)) {
+          Address codeAddress = CreateDispatchMessage();
+          *symbolAddress = codeAddress;
+          sys_printf("DispatchMessageA patched\n");
+        } else
 #endif
         {
           

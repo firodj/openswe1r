@@ -3,7 +3,9 @@
 // Refer to the included LICENSE.txt file.
 
 #include <unicorn/unicorn.h>
-
+#include <keystone/keystone.h>
+#include <capstone/capstone.h>
+#include <sstream>
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -12,13 +14,16 @@
 #include <inttypes.h>
 #include <assert.h>
 
-#include "SDL.h"
+//#include "SDL.h"
+#include "GLFW/glfw3.h"
 
 #include "common.h"
 #include "descriptor.h"
 #include "emulation.h"
 #include "exe.h"
 #include "main.h"
+
+extern GLFWwindow* glfwWindow;
 
 FILE* handles[10000];
 uint32_t handle_index = 1;
@@ -45,6 +50,7 @@ static uint32_t heapSize = 1024 * 1024 * 1024; // 1024 MiB
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
 
+Address wndMainProc = 0;
 
 unsigned int currentThread = -1;
 unsigned int threadCount = 0;
@@ -142,17 +148,45 @@ static void UcErrorHook(uc_engine* uc, uc_mem_type type, uint64_t address, int s
 }
 
 // Callback for tracing instructions
-#if 0
-static void UcTraceHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
-  int eip, esp, eax, esi;
-  uc_reg_read(uc, UC_X86_REG_EIP, &eip);
-  uc_reg_read(uc, UC_X86_REG_ESP, &esp);
-  uc_reg_read(uc, UC_X86_REG_EAX, &eax);
-  uc_reg_read(uc, UC_X86_REG_ESI, &esi);
-  static uint32_t id = 0;
-  sys_printf("%7" PRIu32 " TRACE Emulation at 0x%X (ESP: 0x%X); eax = 0x%08" PRIX32 " esi = 0x%08" PRIX32 " (TS: %" PRIu64 ")\n", id++, eip, esp, eax, esi, GetTicks());
+void DisAsmX86(uint64_t address) {
+  csh handle;
+  cs_insn *insn;
+  size_t count;
+  
+  uint8_t *code = (uint8_t*)Memory(address);
+  
+  if (cs_open(CS_ARCH_X86, CS_MODE_32, &handle) != CS_ERR_OK)
+    return;
+  
+  count = cs_disasm(handle, code, 17, address, 1, &insn);
+  if (count > 0) {
+    size_t j = 0;
+    for (j = 0; j < count; j++) {
+      sys_printf("0x%" PRIx64 ":\t%s\t\t%s\n", insn[j].address, insn[j].mnemonic,
+          insn[j].op_str);
+    }
+
+    cs_free(insn, count);
+  } else
+    sys_printf("ERROR: Failed to disassemble given code!\n");
+
+  cs_close(&handle);
 }
-#endif
+
+static void UcTraceHook(uc_engine* uc, uint64_t address, uint32_t size, void* user_data) {
+  
+  int eip, esp, ebp;
+  
+  uc_reg_read(uc, UC_X86_REG_EIP, (void*)&eip);
+  uc_reg_read(uc, UC_X86_REG_ESP, (void*)&esp);
+  uc_reg_read(uc, UC_X86_REG_EBP, (void*)&ebp);
+  
+  DisAsmX86(address);
+  sys_printf(" eip = 0x%08" PRIX32 " (%d)", eip, eip - wndMainProc);
+  sys_printf(" esp = 0x%08" PRIX32, esp);
+  sys_printf(" ebp = 0x%08" PRIX32 "\n", ebp);
+}
+
 
 typedef struct {
   bool is_called;
@@ -367,6 +401,72 @@ Address CreateInt(uint32_t intno, uint32_t eax) {
   return code_address;
 }
 
+Address AsmX86(const char* CODE, int* psize_encode)
+{
+  ks_engine *ks;
+  unsigned char *encode;
+  size_t size_encode, count_encode;
+
+  ks_err err = ks_open(KS_ARCH_X86, KS_MODE_32, &ks);
+  if (err != KS_ERR_OK) {
+    sys_printf("ERROR: failed on ks_open()\n");
+    return 0;
+  }
+  
+  Address code_address =  0;
+  if (ks_asm(ks, CODE, 0, &encode, &size_encode, &count_encode) != KS_ERR_OK) {
+    sys_printf("ERROR: ks_asm() failed & count = %lu, error = %u\n",
+      count_encode, ks_errno(ks));
+  } else {
+    code_address = Allocate(size_encode);
+    if (psize_encode) *psize_encode = size_encode;
+    
+    uint8_t* code = (uint8_t*)Memory(code_address);
+    memcpy(code, encode, size_encode);
+    ks_free(encode);
+    
+    sys_printf("Compiled: %lu bytes, statements: %lu\n", size_encode, count_encode);
+    sys_printf("%s = ", CODE);
+    size_t i;
+    for (i = 0; i < size_encode; i++) {
+      sys_printf("%02x ", encode[i]);
+    }
+    sys_printf("\n");
+  }
+  
+  ks_close(ks);
+
+  return code_address;
+}
+
+Address CreateDispatchMessage()
+{
+  std::ostringstream CODE;
+  CODE << "PUSH ebp;";
+  // +8 -> arg1
+  // +4 -> retaddr
+  // 0 -> ebp
+  CODE << "MOV ebp, DWORD PTR [esp+8];";
+  
+  CODE << "PUSH DWORD PTR [ebp+12];"; // lparam
+  CODE << "PUSH DWORD PTR [ebp+8];"; // wparam
+  CODE << "PUSH DWORD PTR [ebp+4];"; // msg
+  CODE << "PUSH DWORD PTR [ebp];"; // hwnd
+  CODE << "CALL [0x" << std::hex << wndMainProc << "];";
+  
+  CODE << "POP ebp;";
+  CODE << "RET 0x4;";
+  
+  int code_size;
+  Address code_address = AsmX86(CODE.str().c_str(), &code_size);
+  
+  //static uc_hook traceHook = -1;
+  //uc_hook_add(uc, &traceHook, UC_HOOK_CODE, (void*)UcTraceHook, NULL, code_address, code_address + code_size);
+  
+  return code_address;
+}
+
+
 typedef struct {
   Address address;
   ExportCallback callback;
@@ -548,6 +648,9 @@ void InitializeEmulation() {
   heap = (uint8_t*)aligned_malloc(ucAlignment, heapSize);
   memset(heap, 0xAA, heapSize);
   MapMemory(heap, heapAddress, heapSize, true, true, true);
+  
+  wndMainProc = Allocate(sizeof(uint32_t));
+  *(uint32_t*)Memory(wndMainProc) = 0;
 }
 
 #if 0

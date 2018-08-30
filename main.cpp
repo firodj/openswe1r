@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "common.h"
 #include "descriptor.h"
@@ -20,10 +21,8 @@
 //FIXME: Alternative for non-posix OS!
 #include <time.h>
 
-
-#include "SDL.h"
-
 #include "glad/glad.h"
+#include <GLFW/glfw3.h>
 
 #include "com/d3d.h"
 #include "com/ddraw.h"
@@ -33,7 +32,7 @@ uint32_t callId = 0;
 
 unsigned int exportCount = 0;
 Export* exports = NULL;
-SDL_Window* sdlWindow;
+GLFWwindow* glfwWindow = NULL;
 
 void AddExport(const char* name, ExportCallback callback, Address address) {
   exports = (Export*)realloc(exports, (exportCount + 1) * sizeof(Export));
@@ -477,37 +476,68 @@ void RunX86(Exe* exe) {
   CleanupEmulation();
 }
 
+static void glfw_error_callback(int error, const char* description)
+{
+    sys_printf("Glfw Error %d: %s\n", error, description);
+}
+
+void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
 int main(int argc, char* argv[]) {
   sys_printf("-- Initializing\n");
   InitializeEmulation();
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
-    sys_printf("Failed to initialize SDL2!\n");
+  
+  glfwSetErrorCallback(glfw_error_callback);
+  if (!glfwInit()) {
+    sys_printf("Failed to initialize GLFW!\n");
+    return 1;
   }
+ 
+  {
+    int major, minor, revision;
+    glfwGetVersion(&major, &minor, &revision);
+    sys_printf("Running against GLFW %i.%i.%i\n", major, minor, revision);
+  }
+    
   sys_printf("-- Creating window\n");
   {
     bool fullscreen = false;
     int w = 640;
     int h = 480;
 
-  	Uint32 style = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
-    if (fullscreen) {
-      style |= SDL_WINDOW_FULLSCREEN;
-    }
+  	//Uint32 style = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
+    //if (fullscreen) {
+    //  style |= SDL_WINDOW_FULLSCREEN;
+    //}
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    //SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    //SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    //SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-    sdlWindow = SDL_CreateWindow("OpenSWE1R", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, style);
-    assert(sdlWindow != NULL);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+      
+    //sdlWindow = SDL_CreateWindow("OpenSWE1R", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, style);
+    //assert(sdlWindow != NULL);
+      
+    glfwWindow = glfwCreateWindow(w, h, "OpenSWE1R", NULL, NULL);
+    assert(glfwWindow != NULL);
+      
+    glfwSetKeyCallback(glfwWindow, glfw_key_callback);
+      
+    glfwMakeContextCurrent(glfwWindow);
 
-    SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
-    assert(glcontext != NULL);
+    //SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
+    //assert(glcontext != NULL);
 
-    gladLoadGLLoader(SDL_GL_GetProcAddress);
+    //gladLoadGLLoader(SDL_GL_GetProcAddress);
+    gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
+    
     sys_printf("Vendor:   %s\n", glGetString(GL_VENDOR));
     sys_printf("Renderer: %s\n", glGetString(GL_RENDERER));
     sys_printf("Version:  %s\n", glGetString(GL_VERSION));
@@ -524,7 +554,7 @@ int main(int argc, char* argv[]) {
 //    glDepthFunc(GL_GEQUAL);
     glCullFace(GL_FRONT);
 
-  	SDL_ShowWindow(sdlWindow);
+  	//SDL_ShowWindow(sdlWindow);
   }
   sys_printf("-- Compiling shaders\n");
   GLuint shader1Texture = 0;
@@ -603,5 +633,9 @@ int main(int argc, char* argv[]) {
   RunX86(exe);
   sys_printf("-- Exiting\n");
   UnloadExe(exe);
+  
+  glfwDestroyWindow(glfwWindow);
+  glfwTerminate();
+    
   return EXIT_SUCCESS;
 }

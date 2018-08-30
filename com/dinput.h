@@ -53,7 +53,6 @@ typedef struct {
 #endif
 } API(DIDEVICEOBJECTDATA);
 
-
 // From Microsoft DX6 SDK headers
 
 enum {

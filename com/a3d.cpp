@@ -42,7 +42,7 @@ typedef struct {
 } A3DSOURCE;
 
 
-#define a3d_printf LogPrintf
+#define a3d_printf LogSilent
 
 #if 0
 DECLARE_INTERFACE_(IA3d4, IUnknown)

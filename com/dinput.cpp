@@ -10,7 +10,9 @@
 #include <string.h>
 #include <assert.h>
 
-#include "SDL.h"
+#include "GLFW/glfw3.h"
+
+extern GLFWwindow* glfwWindow;
 
 #if 0
 
@@ -86,11 +88,6 @@ DECLARE_INTERFACE_(IDirectInputDeviceA, IUnknown)
 
 
 
-
-
-
-
-
 // DirectInput
 
 HACKY_IMPORT_BEGIN(DirectInputCreateA)
@@ -117,15 +114,16 @@ HACKY_COM_BEGIN(IDirectInputA, 2)
 HACKY_COM_END()
 
 // IDirectInputA -> STDMETHOD(CreateDevice)(THIS_ REFGUID,LPDIRECTINPUTDEVICEA *,LPUNKNOWN) PURE;
-HACKY_COM_BEGIN(IDirectInputA, 3)
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("rguid 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpIDD 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[4]);
+HACKY_COM_BEGIN2(IDirectInputA, 3)
+  my_printf("IDirectInputA::CreateDevice");
+  my_printf(" this:0x%" PRIX32, stack[1]);
+  my_printf(" rguid:0x%" PRIX32, stack[2]);
+  my_printf(" lpIDD:0x%" PRIX32, stack[3]);
+  my_printf(" pUnkOuter:0x%" PRIX32 "\n", stack[4]);
   *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 200, 100);
   eax = 0; // HRESULT -> non-negative means success
-  esp += 4 * 4;
-HACKY_COM_END()
+  //esp += 4 * 4;
+HACKY_COM_END2(4)
 
 // IDirectInputA -> STDMETHOD(EnumDevices)(THIS_ DWORD,LPDIENUMDEVICESCALLBACKA,LPVOID,DWORD) PURE;
 HACKY_COM_BEGIN(IDirectInputA, 4)
@@ -230,9 +228,50 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 8)
   esp += 1 * 4;
 HACKY_COM_END()
 
-uint8_t keyboardState[256];
+uint8_t keyboardState[256] = {0};
+
+void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    const uint8_t pressed = 0x80; // This is the only requirement for pressed keys
+    const uint8_t unpressed = 0x00;
+    uint32_t dikscan = 0;
+    switch(key) {
+        case GLFW_KEY_ESCAPE: dikscan = API(DIK_ESCAPE); break;
+        case GLFW_KEY_ENTER: dikscan = API(DIK_RETURN); break;
+        case GLFW_KEY_SPACE: dikscan = API(DIK_SPACE); break;
+        case GLFW_KEY_UP: dikscan = API(DIK_UP); break;
+        case GLFW_KEY_DOWN: dikscan = API(DIK_DOWN); break;
+        case GLFW_KEY_LEFT: dikscan = API(DIK_LEFT); break;
+        case GLFW_KEY_RIGHT: dikscan = API(DIK_RIGHT); break;
+        case GLFW_KEY_RIGHT_SHIFT: dikscan = API(DIK_RSHIFT); break;
+        case GLFW_KEY_LEFT_SHIFT: dikscan = API(DIK_LSHIFT); break;
+        case GLFW_KEY_RIGHT_ALT: dikscan = API(DIK_RALT); break;
+        case GLFW_KEY_LEFT_ALT: dikscan = API(DIK_LALT); break;
+        case GLFW_KEY_RIGHT_CONTROL: dikscan = API(DIK_RCONTROL); break;
+        case GLFW_KEY_LEFT_CONTROL: dikscan = API(DIK_LCONTROL); break;
+        case GLFW_KEY_TAB: dikscan = API(DIK_TAB); break;
+        case GLFW_KEY_BACKSPACE: dikscan = API(DIK_BACKSPACE); break;
+        case GLFW_KEY_Q: dikscan = API(DIK_Q); break;
+        case GLFW_KEY_W: dikscan = API(DIK_W); break;
+        case GLFW_KEY_E: dikscan = API(DIK_E); break;
+            
+        case GLFW_KEY_A: dikscan = API(DIK_A); break;
+        case GLFW_KEY_S: dikscan = API(DIK_S); break;
+        case GLFW_KEY_D: dikscan = API(DIK_D); break;
+            
+        case GLFW_KEY_Z: dikscan = API(DIK_Z); break;
+        case GLFW_KEY_X: dikscan = API(DIK_X); break;
+        case GLFW_KEY_C: dikscan = API(DIK_C); break;
+        default:
+            return;
+    }
+    keyboardState[dikscan] = action == GLFW_PRESS ? pressed : unpressed;
+    
+}
+
+#if 0
 void UpdateKeyboardState() {
-  const Uint8 *sdlState = SDL_GetKeyboardState(NULL);
+  const uint8_t *sdlState = SDL_GetKeyboardState(NULL);
   const uint8_t pressed = 0x80; // This is the only requirement for pressed keys
   const uint8_t unpressed = 0x00;
   memset(keyboardState, 0x00, 256);
@@ -276,13 +315,14 @@ void UpdateKeyboardState() {
   keyboardState[API(DIK_LALT)] = sdlState[SDL_SCANCODE_LALT] ? pressed : unpressed;
   keyboardState[API(DIK_RALT)] = sdlState[SDL_SCANCODE_RALT] ? pressed : unpressed;
 }
+#endif
 
 // IDirectInputDeviceA -> STDMETHOD(GetDeviceState)(THIS_ DWORD,LPVOID) PURE; // 9
 HACKY_COM_BEGIN(IDirectInputDeviceA, 9)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  UpdateKeyboardState();
+  //UpdateKeyboardState();
   memcpy(Memory(stack[3]), keyboardState, stack[2]);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
@@ -302,7 +342,7 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
   // Diff the keyboard input between calls
   static uint8_t previousState[256] = {0};
   assert(sizeof(previousState) == sizeof(keyboardState));
-  UpdateKeyboardState();
+  //UpdateKeyboardState();
   uint32_t* count = (uint32_t*)Memory(stack[4]);
   unsigned int max_count = *count;
   info_printf("max count is %d\n", max_count);

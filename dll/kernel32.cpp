@@ -808,4 +808,12 @@ HACKY_IMPORT_BEGIN(GetVolumeInformationA)
   esp += 8 * 4;
 HACKY_IMPORT_END()
 
+//Kernel32.lib
+HACKY_IMPORT_BEGIN2(OutputDebugStringA)
+  Address lpOutputString = stack[1];
+  if (lpOutputString) {
+    const char *str = (const char*)Memory(lpOutputString);
+    sys_printf("OutputDebugStringA: %s\n", str);
+  }
+HACKY_IMPORT_END2(1)
 
