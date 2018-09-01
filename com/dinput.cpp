@@ -113,30 +113,55 @@ HACKY_COM_BEGIN(IDirectInputA, 2)
   esp += 1 * 4;
 HACKY_COM_END()
 
+char* StringFromGUID(API(GUID)* rguid)
+{
+  static char guid_str[40];
+  sprintf(guid_str, "{%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}",
+    rguid->Data1, rguid->Data2, rguid->Data3,
+    rguid->Data4[0], rguid->Data4[1], rguid->Data4[2], rguid->Data4[3],
+    rguid->Data4[4], rguid->Data4[5], rguid->Data4[6], rguid->Data4[7]);
+  return guid_str;
+}
+
 // IDirectInputA -> STDMETHOD(CreateDevice)(THIS_ REFGUID,LPDIRECTINPUTDEVICEA *,LPUNKNOWN) PURE;
 HACKY_COM_BEGIN2(IDirectInputA, 3)
   my_printf("IDirectInputA::CreateDevice");
   my_printf(" this:0x%" PRIX32, stack[1]);
-  my_printf(" rguid:0x%" PRIX32, stack[2]);
+
+  API(GUID)* rguid = (API(GUID)*) Memory(stack[2]);
+  const char *guid_str = StringFromGUID(rguid);
+
+  my_printf(" rguid:0x%" PRIX32 " %s", stack[2], guid_str);
   my_printf(" lpIDD:0x%" PRIX32, stack[3]);
   my_printf(" pUnkOuter:0x%" PRIX32 "\n", stack[4]);
+
   *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 200, 100);
+
   eax = 0; // HRESULT -> non-negative means success
   //esp += 4 * 4;
 HACKY_COM_END2(4)
 
+API(GUID) API(GUID_SysMouse) = { 0x6F1D2B60, 0xD5A0, 0x11CF, { 0xBF,0xC7,0x44,0x45,0x53,0x54,0x00,0x00 } };
+API(GUID) API(GUID_SysKeyboard) = { 0x6F1D2B61, 0xD5A0, 0x11CF, { 0xBF,0xC7,0x44,0x45,0x53,0x54,0x00,0x00 } };
+API(GUID) API(GUID_Joystick) = { 0x6F1D2B70, 0xD5A0, 0x11CF, {0xBF,0xC7,0x44,0x45,0x53,0x54,0x00,0x00 }};
+
+/**
+DEFINE_GUID(GUID_SysMouse,  0x6F1D2B60,0xD5A0,0x11CF,0xBF,0xC7,0x44,0x45,0x53,0x54,0x00,0x00);
+DEFINE_GUID(GUID_SysKeyboard,  0x6F1D2B61,0xD5A0,0x11CF,0xBF,0xC7,0x44,0x45,0x53,0x54,0x00,0x00);
+DEFINE_GUID(GUID_Joystick,  0x6F1D2B70,0xD5A0,0x11CF,0xBF,0xC7,0x44,0x45,0x53,0x54,0x00,0x00);
+**/
 // IDirectInputA -> STDMETHOD(EnumDevices)(THIS_ DWORD,LPDIENUMDEVICESCALLBACKA,LPVOID,DWORD) PURE;
 HACKY_COM_BEGIN(IDirectInputA, 4)
-  hacky_printf("EnumDevices\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  uint32_t a = stack[2];
-  uint32_t b = stack[3];
-  uint32_t c = stack[4];
-  uint32_t d = stack[5];
-  hacky_printf("a 0x%" PRIX32 "\n", a);
-  hacky_printf("b 0x%" PRIX32 "\n", b);
-  hacky_printf("c 0x%" PRIX32 "\n", c);
-  hacky_printf("d 0x%" PRIX32 "\n", d);
+  sys_printf("IDirectInputA::EnumDevices");
+  sys_printf(" this:0x%" PRIX32, stack[1]);
+  uint32_t dwDevType = stack[2];
+  uint32_t lpCallback = stack[3];
+  uint32_t pvRef = stack[4];
+  uint32_t dwFlags = stack[5];
+  sys_printf(" dwDevType:0x%" PRIX32, dwDevType);
+  sys_printf(" lpCallback:0x%" PRIX32, lpCallback);
+  sys_printf(" pvRef:0x%" PRIX32, pvRef);
+  sys_printf(" dwFlags:0x%" PRIX32 "\n", dwFlags);
   //FIXME: Do some callback stuff
   eax = 0; // HRESULT -> non-negative means success
   esp += 5 * 4;
@@ -149,7 +174,7 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
 
   {
     esp -= 4;
-    *(uint32_t*)Memory(esp) = c; // pvRef
+    *(uint32_t*)Memory(esp) = pvRef;
 
     Address ddiAddress = Allocate(sizeof(API(DIDEVICEINSTANCEA)));
     API(DIDEVICEINSTANCEA)* ddi = (API(DIDEVICEINSTANCEA)*) Memory(ddiAddress);
@@ -174,7 +199,7 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
     // Emulate the call
     esp -= 4;
     *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
-    eip = b;
+    eip = lpCallback;
 
     info_printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0

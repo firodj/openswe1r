@@ -21,18 +21,17 @@
 //FIXME: Alternative for non-posix OS!
 #include <time.h>
 
-#include "glad/glad.h"
-#include <GLFW/glfw3.h>
+#include "Application.hpp"
 
 #include "com/d3d.h"
 #include "com/ddraw.h"
 #include "com/dinput.h"
 
+
 uint32_t callId = 0;
 
 unsigned int exportCount = 0;
 Export* exports = NULL;
-GLFWwindow* glfwWindow = NULL;
 
 void AddExport(const char* name, ExportCallback callback, Address address) {
   exports = (Export*)realloc(exports, (exportCount + 1) * sizeof(Export));
@@ -476,71 +475,13 @@ void RunX86(Exe* exe) {
   CleanupEmulation();
 }
 
-static void glfw_error_callback(int error, const char* description)
-{
-    sys_printf("Glfw Error %d: %s\n", error, description);
-}
-
-void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
-
 int main(int argc, char* argv[]) {
+  Application application;
+  application.Init();
+  
   sys_printf("-- Initializing\n");
   InitializeEmulation();
   
-  glfwSetErrorCallback(glfw_error_callback);
-  if (!glfwInit()) {
-    sys_printf("Failed to initialize GLFW!\n");
-    return 1;
-  }
- 
-  {
-    int major, minor, revision;
-    glfwGetVersion(&major, &minor, &revision);
-    sys_printf("Running against GLFW %i.%i.%i\n", major, minor, revision);
-  }
-    
-  sys_printf("-- Creating window\n");
-  {
-    bool fullscreen = false;
-    int w = 640;
-    int h = 480;
-
-  	//Uint32 style = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
-    //if (fullscreen) {
-    //  style |= SDL_WINDOW_FULLSCREEN;
-    //}
-
-    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    //SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    //SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    //SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    //SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
-      
-    //sdlWindow = SDL_CreateWindow("OpenSWE1R", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, style);
-    //assert(sdlWindow != NULL);
-      
-    glfwWindow = glfwCreateWindow(w, h, "OpenSWE1R", NULL, NULL);
-    assert(glfwWindow != NULL);
-      
-    glfwSetKeyCallback(glfwWindow, glfw_key_callback);
-      
-    glfwMakeContextCurrent(glfwWindow);
-
-    //SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
-    //assert(glcontext != NULL);
-
-    //gladLoadGLLoader(SDL_GL_GetProcAddress);
-    gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
-    
-    sys_printf("Vendor:   %s\n", glGetString(GL_VENDOR));
-    sys_printf("Renderer: %s\n", glGetString(GL_RENDERER));
-    sys_printf("Version:  %s\n", glGetString(GL_VERSION));
 
     //FIXME: This is ugly but gets the job done.. for now
     static GLuint vao = 0;
@@ -549,13 +490,12 @@ int main(int argc, char* argv[]) {
     }
     glBindVertexArray(vao);
 
-
     glDisable(GL_CULL_FACE);
 //    glDepthFunc(GL_GEQUAL);
     glCullFace(GL_FRONT);
 
   	//SDL_ShowWindow(sdlWindow);
-  }
+  
   sys_printf("-- Compiling shaders\n");
   GLuint shader1Texture = 0;
   {
@@ -567,6 +507,13 @@ int main(int argc, char* argv[]) {
   PrintShaderProgramLog(shader1Texture);
   assert(linked);
   glUseProgram(shader1Texture); //FIXME: Hack..
+
+  application.Run();
+  
+
+  
+  // -----------------------------------------------------------
+#if 0
   sys_printf("-- Loading exe\n");
   
   Exe *exe = LoadExe(exeName);
@@ -603,29 +550,30 @@ int main(int argc, char* argv[]) {
 // 0x75 = jne (probably used to be `je`, used to invert condition)
 
 // These functions access internal FILE* data I belive; crashes our emu
-#if 0
+/**
 *(uint8_t*)Memory(0x4A1670) = 0xC3; // _lock
 *(uint8_t*)Memory(0x4A16F0) = 0xC3; // _unlock
 *(uint8_t*)Memory(0x4A1710) = 0xC3; // _lock_file
 *(uint8_t*)Memory(0x4A1780) = 0xC3; // _unlock_file
-#endif
+*//
 
-#if 0 //FIXME FIXME FIXME FIXME FIXME
+/**
+//FIXME FIXME FIXME FIXME FIXME
   // These do something bad internally
   CreateBreakpoint(0x49f270, UcMallocHook, "<malloc>");
   CreateBreakpoint(0x49f200, UcFreeHook, "<free>");
 
   // This function used to crash with SIGSEGV, so I wanted to peek at the parameters.
   CreateBreakpoint(0x48A230, UcTGAHook, "<TGAHook>");
-#endif
+*//
 
-#if 0
+/**
 *(uint8_t*)Memory(0x487d71) = 0x75; // Invert the check for eax after "DirectDrawEnumerate" (ours will always fail)
 *(uint8_t*)Memory(0x488ce2) = 0x75; // Invert the check for eax after "EnumDisplayModes" (ours will always fail)
 *(uint8_t*)Memory(0x489e20) = 0x75; // Invert the check for eax after "EnumDevices" [graphics] (ours will always fail)
 *(uint8_t*)Memory(0x48a013) = 0x84; // Invert the check for eax after "EnumTextureFormats" (ours will always fail)
 *(uint8_t*)Memory(0x485433) = 0x75; // Invert the check for eax after "EnumDevices" [input] (ours will always fail)
-#endif
+**/
 
 //memset(Memory(0x423cd9), 0x90, 5); // Disable command line arg scanning
 
@@ -634,8 +582,10 @@ int main(int argc, char* argv[]) {
   sys_printf("-- Exiting\n");
   UnloadExe(exe);
   
-  glfwDestroyWindow(glfwWindow);
-  glfwTerminate();
-    
+#endif
+  // -------------------------------------------
+
+  application.Finish();
+  
   return EXIT_SUCCESS;
 }

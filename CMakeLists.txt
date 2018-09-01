@@ -41,6 +41,9 @@ add_executable(openswe1r
   exe.cpp
   common.cpp
 
+  Application.cpp
+  Application.hpp
+  
   dll/kernel32.cpp
   dll/user32.cpp
   dll/gdi32.cpp

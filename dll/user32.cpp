@@ -9,10 +9,8 @@
 #include <string.h>
 #include <assert.h>
 
-//#include "SDL.h"
-#include "GLFW/glfw3.h"
+#include "../Application.hpp"
 
-extern GLFWwindow* glfwWindow;
 extern Address wndMainProc;
 
 #if 0
@@ -49,6 +47,8 @@ HACKY_IMPORT_BEGIN(GetCursorPos)
   int32_t* point = (int32_t*)Memory(stack[1]);
   double x;
   double y;
+  GLFWwindow* glfwWindow = Application::Get()->window();
+
   //SDL_GetMouseState(&x, &y);
   glfwGetCursorPos(glfwWindow, &x, &y);
 
@@ -156,6 +156,7 @@ HACKY_IMPORT_BEGIN2(PeekMessageA)
   //my_printf("  wMsgFilterMin:0x%" PRIX32, stack[3]);
   //my_printf("  wMsgFilterMax:0x%" PRIX32, stack[4]);
   //my_printf("  wRemoveMsg:0x%" PRIX32 "\n", stack[5]);
+  GLFWwindow* glfwWindow = Application::Get()->window();
 
   API(MSG) *lpMsg = (API(MSG)*) Memory(stack[1]);
   eax = 0; // If a message is available, the return value is nonzero.
@@ -194,7 +195,8 @@ HACKY_IMPORT_BEGIN2(GetMessageA)
   my_printf("  hWnd:0x%" PRIX32, stack[2]);
   my_printf("  wMsgFilterMin:0x%" PRIX32, stack[3]);
   my_printf("  wMsgFilterMax:0x%" PRIX32 "\n", stack[4]);
-
+  GLFWwindow* glfwWindow = Application::Get()->window();
+  
   API(MSG) *lpMsg = (API(MSG)*) Memory(stack[1]);
 
   glfwPollEvents();

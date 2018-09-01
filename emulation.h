@@ -55,6 +55,10 @@ typedef struct {
     //FIXME: MMX?
 } ThreadContext;
 
+// Asm
+Address AsmX86(const char* CODE, int* psize_encode);
+void DisAsmX86(uint64_t address);
+
 void InitializeEmulation();
 void CleanupEmulation();
 
