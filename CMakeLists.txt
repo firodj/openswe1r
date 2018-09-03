@@ -43,6 +43,10 @@ add_executable(openswe1r
 
   Application.cpp
   Application.hpp
+  Game.cpp
+  Game.hpp
+  StarWars.cpp
+  StarWars.hpp
   
   dll/kernel32.cpp
   dll/user32.cpp

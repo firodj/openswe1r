@@ -12,6 +12,8 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <ctype.h>
+#include <thread>
+#include <memory>
 
 #include "common.h"
 #include "descriptor.h"
@@ -22,6 +24,7 @@
 #include <time.h>
 
 #include "Application.hpp"
+#include "StarWars.hpp"
 
 #include "com/d3d.h"
 #include "com/ddraw.h"
@@ -475,45 +478,13 @@ void RunX86(Exe* exe) {
   CleanupEmulation();
 }
 
-int main(int argc, char* argv[]) {
-  Application application;
-  application.Init();
-  
-  sys_printf("-- Initializing\n");
-  InitializeEmulation();
-  
+void ExecuteGame(Game& game)
+{
+  game.Run();
+}
 
-    //FIXME: This is ugly but gets the job done.. for now
-    static GLuint vao = 0;
-    if (vao == 0) {
-      glGenVertexArrays(1, &vao);
-    }
-    glBindVertexArray(vao);
-
-    glDisable(GL_CULL_FACE);
-//    glDepthFunc(GL_GEQUAL);
-    glCullFace(GL_FRONT);
-
-  	//SDL_ShowWindow(sdlWindow);
-  
-  sys_printf("-- Compiling shaders\n");
-  GLuint shader1Texture = 0;
-  {
-    GLuint vertexShader = CreateShader(VertexShader1Texture, GL_VERTEX_SHADER);
-    GLuint fragmentShader = CreateShader(FragmentShader1Texture, GL_FRAGMENT_SHADER);
-    shader1Texture = CreateShaderProgram(vertexShader, fragmentShader);
-  }
-  bool linked = LinkShaderProgram(shader1Texture);
-  PrintShaderProgramLog(shader1Texture);
-  assert(linked);
-  glUseProgram(shader1Texture); //FIXME: Hack..
-
-  application.Run();
-  
-
-  
-  // -----------------------------------------------------------
-#if 0
+void ThreadEmu()
+{
   sys_printf("-- Loading exe\n");
   
   Exe *exe = LoadExe(exeName);
@@ -555,7 +526,7 @@ int main(int argc, char* argv[]) {
 *(uint8_t*)Memory(0x4A16F0) = 0xC3; // _unlock
 *(uint8_t*)Memory(0x4A1710) = 0xC3; // _lock_file
 *(uint8_t*)Memory(0x4A1780) = 0xC3; // _unlock_file
-*//
+*/
 
 /**
 //FIXME FIXME FIXME FIXME FIXME
@@ -565,7 +536,7 @@ int main(int argc, char* argv[]) {
 
   // This function used to crash with SIGSEGV, so I wanted to peek at the parameters.
   CreateBreakpoint(0x48A230, UcTGAHook, "<TGAHook>");
-*//
+*/
 
 /**
 *(uint8_t*)Memory(0x487d71) = 0x75; // Invert the check for eax after "DirectDrawEnumerate" (ours will always fail)
@@ -581,10 +552,55 @@ int main(int argc, char* argv[]) {
   RunX86(exe);
   sys_printf("-- Exiting\n");
   UnloadExe(exe);
-  
-#endif
-  // -------------------------------------------
+}
 
+int main(int argc, char* argv[]) {
+  Application application;
+  application.Init();
+  
+  sys_printf("-- Initializing\n");
+
+  /*** -----
+  InitializeEmulation();
+  
+  
+    //FIXME: This is ugly but gets the job done.. for now
+    static GLuint vao = 0;
+    if (vao == 0) {
+      glGenVertexArrays(1, &vao);
+    }
+    glBindVertexArray(vao);
+
+    glDisable(GL_CULL_FACE);
+//    glDepthFunc(GL_GEQUAL);
+    glCullFace(GL_FRONT);
+
+  	//SDL_ShowWindow(sdlWindow);
+  
+  sys_printf("-- Compiling shaders\n");
+  GLuint shader1Texture = 0;
+  {
+    GLuint vertexShader = CreateShader(VertexShader1Texture, GL_VERTEX_SHADER);
+    GLuint fragmentShader = CreateShader(FragmentShader1Texture, GL_FRAGMENT_SHADER);
+    shader1Texture = CreateShaderProgram(vertexShader, fragmentShader);
+  }
+  bool linked = LinkShaderProgram(shader1Texture);
+  PrintShaderProgramLog(shader1Texture);
+  assert(linked);
+  glUseProgram(shader1Texture); //FIXME: Hack..
+  
+  -------- ***/
+
+  Game game;
+  game.Init();
+  
+  std::thread thread_game(ExecuteGame, std::ref(game));
+  application.Run(reinterpret_cast<void*>(&game));
+  game.set_request_stop(true);
+  thread_game.join();
+  
+  game.Finish();
+  
   application.Finish();
   
   return EXIT_SUCCESS;
