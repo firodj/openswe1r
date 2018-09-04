@@ -47,10 +47,10 @@ HACKY_IMPORT_BEGIN(GetCursorPos)
   int32_t* point = (int32_t*)Memory(stack[1]);
   double x;
   double y;
-  GLFWwindow* glfwWindow = Application::Get()->window();
+  //GLFWwindow* glfwWindow = Application::Get()->window();
 
   //SDL_GetMouseState(&x, &y);
-  glfwGetCursorPos(glfwWindow, &x, &y);
+  //glfwGetCursorPos(glfwWindow, &x, &y);
 
   point[0] = (int)x;
   point[1] = (int)y;
@@ -156,14 +156,15 @@ HACKY_IMPORT_BEGIN2(PeekMessageA)
   //my_printf("  wMsgFilterMin:0x%" PRIX32, stack[3]);
   //my_printf("  wMsgFilterMax:0x%" PRIX32, stack[4]);
   //my_printf("  wRemoveMsg:0x%" PRIX32 "\n", stack[5]);
-  GLFWwindow* glfwWindow = Application::Get()->window();
+
+  //GLFWwindow* glfwWindow = Application::Get()->window();
 
   API(MSG) *lpMsg = (API(MSG)*) Memory(stack[1]);
   eax = 0; // If a message is available, the return value is nonzero.
 
-  glfwPollEvents();
+  //glfwPollEvents();
 
-  if (glfwWindowShouldClose(glfwWindow)) {
+  if (0) { // glfwWindowShouldClose(glfwWindow)) {
     memset(lpMsg, 0x00, sizeof(API(MSG)));
     
     lpMsg->message = API(WM_DESTROY);
@@ -172,7 +173,7 @@ HACKY_IMPORT_BEGIN2(PeekMessageA)
     pendingMsg = *lpMsg;
     eax = 1;
   } else {
-    int state = glfwGetMouseButton(glfwWindow, GLFW_MOUSE_BUTTON_LEFT);
+    int state = 0; //glfwGetMouseButton(glfwWindow, GLFW_MOUSE_BUTTON_LEFT);
     if (state == GLFW_PRESS) {
       memset(lpMsg, 0x00, sizeof(API(MSG)));
       
@@ -195,25 +196,26 @@ HACKY_IMPORT_BEGIN2(GetMessageA)
   my_printf("  hWnd:0x%" PRIX32, stack[2]);
   my_printf("  wMsgFilterMin:0x%" PRIX32, stack[3]);
   my_printf("  wMsgFilterMax:0x%" PRIX32 "\n", stack[4]);
-  GLFWwindow* glfwWindow = Application::Get()->window();
+
+  //GLFWwindow* glfwWindow = Application::Get()->window();
   
   API(MSG) *lpMsg = (API(MSG)*) Memory(stack[1]);
 
-  glfwPollEvents();
+  //glfwPollEvents();
 
   if (pendingMsg.message) {
       *lpMsg = pendingMsg;
       
       memset(&pendingMsg, 0x00, sizeof(API(MSG)));
   } else {
-      if (glfwWindowShouldClose(glfwWindow)) {
+      if (false) { // glfwWindowShouldClose(glfwWindow)) {
           memset(lpMsg, 0x00, sizeof(API(MSG)));
           
           lpMsg->message = API(WM_DESTROY);
           lpMsg->hwnd = stack[2];
       } else {
 
-        int state = glfwGetMouseButton(glfwWindow, GLFW_MOUSE_BUTTON_LEFT);
+        int state = 0; //glfwGetMouseButton(glfwWindow, GLFW_MOUSE_BUTTON_LEFT);
         if (state == GLFW_PRESS) {
             memset(lpMsg, 0x00, sizeof(API(MSG)));
             

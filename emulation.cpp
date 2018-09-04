@@ -794,6 +794,103 @@ ThreadContext *GetCurrentThreadContext() {
     return &threads[currentThread];
 }
 
+bool StepEmulation() {
+  uc_err err;
+
+  //FIXME: plenty of options to optimize in single threaded mode.. (register readback not necessary etc.)
+  int skippedThreads = 0;
+  ThreadContext* ctx = nullptr;
+  
+  if (GetThreadCount() == 0) return false;
+  for (skippedThreads = 0; skippedThreads < threadCount; skippedThreads++) {
+    // Very simple round robin schedule.. Re-Volt only uses threads during load screens anyway..
+    currentThread++;
+    if (currentThread >= threadCount) currentThread = 0;
+    
+    // Get current thread
+    ctx = &threads[currentThread];
+
+    if (!ctx->active) continue;
+    if (!ctx->running) continue;
+    break;
+  }
+
+  if (skippedThreads == threadCount) {
+    return false;
+  }
+
+  //FIXME: Decrement time by time slice instead..
+  if (ctx->sleep > 0) {
+    info_printf("\n\n\n\n\nNot waking thread %d from sleep yet\n\n\n\n\n\n", currentThread);
+    ctx->sleep -= 1;
+    return true;
+  }
+
+  TransferContext(ctx, true /* write */);
+
+  uint32_t lastTime = GetTicks();
+  while(ctx->active && ctx->running) {
+    err = uc_emu_start(uc, ctx->eip, 0, 0, 3000000);
+
+#if 0
+    // Finish profiling, if we have partial data
+    if (heat_address != 0) {
+      // Signal block exit by marking the next instruction as block entry
+      heat_is_block_enter_next = true;
+
+      // Save the last profiling sample
+      UcProfilingHook(uc, 0, 0, NULL);
+
+      // Setting address to zero signals that no profiling sample has started
+      heat_address = 0;
+    }
+#endif
+    // Check for errors
+    if (err != 0) {
+      break;
+    }
+
+    uint32_t currentTime = GetTicks();
+  
+    uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
+
+    Address hltAddress = ctx->eip - 1;
+  
+    if (*(uint8_t*)Memory(hltAddress) == 0xF4) {
+        HltHandler* hltHandler = findHltHandler(hltAddress);
+        if(hltHandler != NULL) {
+          hltHandler->callback(uc, hltHandler->address, hltHandler->user_data);
+        }
+
+        //Hack: Manually transfers EIP (might have been changed in callback)
+        uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
+    }
+    
+    if (currentTime > lastTime + 333) {
+      //sys_printf("<%d> Timeout EIP = 0x%x, ticks = %d\n", ctx->id, ctx->eip, currentTime - lastTime);
+      sys_printf("%d>", ctx->id);
+      break; // Context switch after several ticks (ms)
+    }
+  }
+
+  // threads array might be relocated if a thread was modified in a callback; update ctx pointer
+  ctx = &threads[currentThread];
+
+  TransferContext(ctx, false /* read */);
+
+  if (err != 0) {
+    sys_printf("Failed on uc_emu_start() with error returned %u: %s\n", err, uc_strerror(err));
+    PrintContext(ctx);
+    assert(false);
+  }
+
+  //sys_printf("\n\n\Emulation slice completed for thread %d (Count: %d) with %d at 0x%X\n", currentThread, threadCount, err, ctx->eip);
+
+  //PrintContext(ctx);
+  //info_printf("\n\n\n\n\n");
+  return true;
+}
+
 void RunEmulation() {
   uc_err err;
 

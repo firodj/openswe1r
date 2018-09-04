@@ -75,8 +75,6 @@ Export* LookupExportByName(const char* name) {
 
 const char** dirlisting = NULL;
 
-Address clearEax = 0;
-
 uint32_t tls[1000] = {0};
 
 //FIXME: To be moved elsewhere
@@ -122,9 +120,6 @@ Address CreateInterface(const char* name, unsigned int slotCount, uint32_t objec
 
   return interfaceAddress;
 }
-
-Exe* exe; //FIXME: This is hack. I feel this shouldn't be exposed aside from the loader
-const char* exeName = "swep1rcr.exe";
 
 char* TranslatePath(const char* path) {
   size_t length = strlen(path) + 1;
@@ -455,147 +450,20 @@ void UnknownImport(uc_engine* uc, Address address, void* user_data) {
 }
 
 
-
-//FIXME: Abstract exe mapping and context creation from emu kickoff
-void RunX86(Exe* exe) {
-
-  // Map the important exe parts into emu memory
-  for(unsigned int sectionIndex = 0; sectionIndex < exe->coffHeader.numberOfSections; sectionIndex++) {
-    PeSection* section = &exe->sections[sectionIndex];
-    void* mappedSection = (void*)exe->mappedSections[sectionIndex];
-    if (mappedSection != NULL) {
-      uint32_t base = exe->peHeader.imageBase + section->virtualAddress;
-      sys_printf("Mapping 0x%" PRIX32 " - 0x%" PRIX32 "\n", base, base + section->virtualSize - 1);
-      MapMemory(mappedSection, base, AlignUp(section->virtualSize, exe->peHeader.sectionAlignment), true, true, true);
-    }
-  }
-
-  //FIXME: Schedule a virtual main-thread
-  sys_printf("Emulation starting\n");
-  CreateEmulatedThread(exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint, false);
-  RunEmulation();
-
-  CleanupEmulation();
-}
-
 void ExecuteGame(Game& game)
 {
   game.Run();
 }
 
-void ThreadEmu()
-{
-  sys_printf("-- Loading exe\n");
-  
-  Exe *exe = LoadExe(exeName);
-  if (exe == NULL) {
-    sys_printf("Couldn't load '%s'\n", exeName);
-    exit(EXIT_FAILURE);
-  }
-  RelocateExe(exe);
-
-  // Attempt to identify the game version using the COFF timestamp
-  if (exe->coffHeader.timeDateStamp == 0x3727ce0e) {
-    sys_printf("Game version: Retail, English\n");
-  } else if (exe->coffHeader.timeDateStamp == 0x3738c552) {
-    sys_printf("Game version: Retail, German\n"); // International?
-  } else if (exe->coffHeader.timeDateStamp == 0x37582659) {
-    sys_printf("Game version: Webdemo, English\n");
-  } else if (exe->coffHeader.timeDateStamp == 0x3c60692c) {
-    sys_printf("Game version: Patched, English\n");
-  } else if (exe->coffHeader.timeDateStamp == 0x3c6321d1) {
-    sys_printf("Game version: Patched, International\n");
-  } else {
-    sys_printf("Game version: Unknown (COFF timestamp: 0x%08X)\n", exe->coffHeader.timeDateStamp);
-    assert(false);
-  }
-
-  clearEax = Allocate(3);
-  uint8_t* p = (uint8_t*)Memory(clearEax);
-  *p++ = 0x31; *p++ = 0xC0; // xor eax, eax
-  *p++ = 0xC3;              // ret
-
-// 0x90 = nop (used to disable code)
-// 0xC3 = ret (used to skip function)
-// 0x84 = je (probably used to be `jne`, used to invert condition)
-// 0x75 = jne (probably used to be `je`, used to invert condition)
-
-// These functions access internal FILE* data I belive; crashes our emu
-/**
-*(uint8_t*)Memory(0x4A1670) = 0xC3; // _lock
-*(uint8_t*)Memory(0x4A16F0) = 0xC3; // _unlock
-*(uint8_t*)Memory(0x4A1710) = 0xC3; // _lock_file
-*(uint8_t*)Memory(0x4A1780) = 0xC3; // _unlock_file
-*/
-
-/**
-//FIXME FIXME FIXME FIXME FIXME
-  // These do something bad internally
-  CreateBreakpoint(0x49f270, UcMallocHook, "<malloc>");
-  CreateBreakpoint(0x49f200, UcFreeHook, "<free>");
-
-  // This function used to crash with SIGSEGV, so I wanted to peek at the parameters.
-  CreateBreakpoint(0x48A230, UcTGAHook, "<TGAHook>");
-*/
-
-/**
-*(uint8_t*)Memory(0x487d71) = 0x75; // Invert the check for eax after "DirectDrawEnumerate" (ours will always fail)
-*(uint8_t*)Memory(0x488ce2) = 0x75; // Invert the check for eax after "EnumDisplayModes" (ours will always fail)
-*(uint8_t*)Memory(0x489e20) = 0x75; // Invert the check for eax after "EnumDevices" [graphics] (ours will always fail)
-*(uint8_t*)Memory(0x48a013) = 0x84; // Invert the check for eax after "EnumTextureFormats" (ours will always fail)
-*(uint8_t*)Memory(0x485433) = 0x75; // Invert the check for eax after "EnumDevices" [input] (ours will always fail)
-**/
-
-//memset(Memory(0x423cd9), 0x90, 5); // Disable command line arg scanning
-
-  sys_printf("-- Switching mode\n");
-  RunX86(exe);
-  sys_printf("-- Exiting\n");
-  UnloadExe(exe);
-}
-
 int main(int argc, char* argv[]) {
   Application application;
   application.Init();
-  
-  sys_printf("-- Initializing\n");
-
-  /*** -----
-  InitializeEmulation();
-  
-  
-    //FIXME: This is ugly but gets the job done.. for now
-    static GLuint vao = 0;
-    if (vao == 0) {
-      glGenVertexArrays(1, &vao);
-    }
-    glBindVertexArray(vao);
-
-    glDisable(GL_CULL_FACE);
-//    glDepthFunc(GL_GEQUAL);
-    glCullFace(GL_FRONT);
-
-  	//SDL_ShowWindow(sdlWindow);
-  
-  sys_printf("-- Compiling shaders\n");
-  GLuint shader1Texture = 0;
-  {
-    GLuint vertexShader = CreateShader(VertexShader1Texture, GL_VERTEX_SHADER);
-    GLuint fragmentShader = CreateShader(FragmentShader1Texture, GL_FRAGMENT_SHADER);
-    shader1Texture = CreateShaderProgram(vertexShader, fragmentShader);
-  }
-  bool linked = LinkShaderProgram(shader1Texture);
-  PrintShaderProgramLog(shader1Texture);
-  assert(linked);
-  glUseProgram(shader1Texture); //FIXME: Hack..
-  
-  -------- ***/
-
-  Game game;
-  game.Init();
+ 
+  StarWars game;
+  game.Init(640, 480);
   
   std::thread thread_game(ExecuteGame, std::ref(game));
-  application.Run(reinterpret_cast<void*>(&game));
+  application.Run(&game);
   game.set_request_stop(true);
   thread_game.join();
   

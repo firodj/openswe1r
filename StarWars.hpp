@@ -10,4 +10,6 @@ public:
   virtual ~StarWars();
   
   virtual int Run();
+  
+  void CompileShader();
 };

@@ -31,6 +31,7 @@ include_directories(SYSTEM
   ${OPENAL_INCLUDE_DIR}
   ${GLFW_SOURCE_DIR}/include
   ext/glad/include
+  ext/glm
 )
 
 add_executable(openswe1r

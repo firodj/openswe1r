@@ -63,6 +63,7 @@ void InitializeEmulation();
 void CleanupEmulation();
 
 void RunEmulation();
+bool StepEmulation();
 
 typedef void(*ExportCallback)(uc_engine* uc, Address _address, void* _user_data);
 

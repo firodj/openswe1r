@@ -6,11 +6,13 @@
 #include <GLFW/glfw3.h>
 #include <unordered_map>
 
+class Game;
+
 class Application {
 public:
   void Init();
   void Finish();
-  void Run(void* user_data);
+  void Run(Game* game);
   
   void MakeContextCurrent();
   void CompileShader();
@@ -22,12 +24,16 @@ public:
   static void OnFramebufferSizeCallback(GLFWwindow* window, int width, int height);
   
   static Application* Get();
+  static Game* CurrentGame();
   GLFWwindow* window() { return window_; }
   
   bool LockGL(int ms);
   void UnlockGL();
   
+  Game* game() { return game_; }
+  
 private:
   GLFWwindow *window_;
   GLuint quad_shader_program_, quad_vao_, quad_vbo_;
+  Game *game_;
 };

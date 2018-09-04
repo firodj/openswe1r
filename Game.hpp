@@ -14,7 +14,7 @@ public:
   virtual ~Game();
   
   virtual int Run();
-  void Init();
+  void Init(int w, int h);
   void Finish();
   
   void CompileShader();
@@ -24,10 +24,12 @@ public:
   void CreateFramebuffer();
   
   void set_request_stop(bool value) { request_stop_ = value; }
-  GLuint tex() { return tex_[ tex_flip_flop_ ]; }
+  GLuint tex();
   bool render_full() { return render_full_; }
   void ClearRenderFull();
   void SwapBuffer();
+  float hidpi_x() { return hidpi_x_; }
+  float hidpi_y() { return hidpi_y_; }
   
 protected:
   GLuint shader_program_, vao_;
@@ -41,4 +43,5 @@ protected:
   std::mutex mtx_render_full_;
   bool render_full_;
   std::condition_variable cv_render_full_;
+  float hidpi_x_, hidpi_y_;
 };

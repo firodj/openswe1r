@@ -160,6 +160,11 @@ Application* Application::Get()
   return current_application;
 }
 
+Game* Application::CurrentGame()
+{
+  return current_application->game();
+}
+
 void Application::Finish()
 {
   glfwDestroyWindow(window_);
@@ -237,8 +242,9 @@ void Application::CheckGLError(const char *file, int line)
   }
 }
 
-void Application::Run(void* user_data)
+void Application::Run(Game* game)
 {
+  game_ = game;
   glfwSwapInterval(1);
   
   double lastTime = glfwGetTime();
@@ -248,14 +254,13 @@ void Application::Run(void* user_data)
   {
     glfwPollEvents();
     
-    Game* game = reinterpret_cast<Game*>(user_data);
     /**
     if (game) {
       game->Render();
     }
     */
     
-    if (!LockGL(0)) continue;
+    //if (!LockGL(0)) continue;
     
     glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -273,7 +278,7 @@ void Application::Run(void* user_data)
       
       if (game->render_full()) game->ClearRenderFull();
     }
-    UnlockGL();
+    //UnlockGL();
     
     // Measure speed
     double currentTime = glfwGetTime();

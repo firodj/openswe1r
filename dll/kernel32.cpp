@@ -503,7 +503,8 @@ HACKY_IMPORT_BEGIN2(CreateThread)
   my_printf("lpThreadId:0x%" PRIX32 " ", stack[6]);
 
   bool suspended = stack[5] & API(CREATE_SUSPENDED);
-  eax = CreateEmulatedThread(stack[3], suspended);
+  //FIXME: on the main loop
+  //eax = CreateEmulatedThread(stack[3], suspended);
 
   my_printf("=> 0x%" PRIX32 "\n", eax);
 HACKY_IMPORT_END2(6)

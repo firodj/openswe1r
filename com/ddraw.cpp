@@ -12,6 +12,7 @@
 #include <assert.h>
 
 #include "../Application.hpp"
+#include "../Game.hpp"
 
 #if 0
 
@@ -292,10 +293,11 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IDirectDraw4, 10)
   hacky_printf("FlipToGDISurface\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  GLFWwindow* glfwWindow = Application::Get()->window();
+  //GLFWwindow* glfwWindow = Application::Get()->window();
 
   //SDL_GL_SwapWindow(sdlWindow);
-  glfwSwapBuffers(glfwWindow);
+  Application::CurrentGame()->SwapBuffer();
+  //glfwSwapBuffers(glfwWindow);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
@@ -506,10 +508,11 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 11)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  GLFWwindow* glfwWindow = Application::Get()->window();
+  //GLFWwindow* glfwWindow = Application::Get()->window();
   
   //SDL_GL_SwapWindow(sdlWindow);
-  glfwSwapBuffers(glfwWindow);
+  //glfwSwapBuffers(glfwWindow);
+  Application::CurrentGame()->SwapBuffer();
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;

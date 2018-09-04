@@ -5,13 +5,18 @@
 #include <iostream>
 #include <glad/glad.h>
 #include <chrono>
-
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 static const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
+    "uniform mat4 projection;\n"
+    "uniform mat4 view;\n"
+    "uniform mat4 model;\n"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "  gl_Position = projection * view * model * vec4(aPos, 1.0f);\n"
     "}";
 
 static const char *fragmentShaderSource = "#version 330 core\n"
@@ -34,9 +39,8 @@ Game::~Game()
   std::cout << "Game destroyed" << std::endl;
 }
 
-void Game::Init()
+void Game::Init(int w, int h)
 {
-  int w = 1024, h = 768;
   glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -47,6 +51,9 @@ void Game::Init()
   glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
   window_ = glfwCreateWindow(w, h, "OpenSWE1R", NULL, Application::Get()->window());
   glfwGetFramebufferSize(window_, &screen_width_, &screen_height_);
+  
+  hidpi_x_ = (float)screen_width_ / w;
+  hidpi_y_ = (float)screen_height_ / h;
   
   CreateFramebuffer();
 }
@@ -146,10 +153,10 @@ void Game::ConfigureVertex()
   // set up vertex data (and buffer(s)) and configure vertex attributes
   // ------------------------------------------------------------------
   float vertices[] = {
-       0.5f,  0.5f, 0.0f,  // top right
-       0.5f, -0.5f, 0.0f,  // bottom right
-      -0.5f, -0.5f, 0.0f,  // bottom left
-      -0.5f,  0.5f, 0.0f   // top left
+       0.5f,  0.5f, -0.0f,  // top right
+       0.5f, -0.5f, -0.0f,  // bottom right
+      -0.5f, -0.5f, -0.0f,  // bottom left
+      -0.5f,  0.5f, -0.0f   // top left
   };
   unsigned int indices[] = {  // note that we start from 0!
       0, 1, 3,  // first Triangle
@@ -186,23 +193,47 @@ void Game::ConfigureVertex()
 
 void Game::Render()
 {
-  glBindFramebuffer(GL_FRAMEBUFFER, fb_);
-  glViewport(0, 0, screen_width_, screen_height_);
-  
+  glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)1024 / (float)768, 0.1f, 100.0f);
+  glm::mat4 view(1.0);
+  view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+  glm::mat4 model(1.0);
+  model = glm::rotate(model, (float)glfwGetTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+
   glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   glUseProgram(shader_program_);
+  glUniformMatrix4fv(glGetUniformLocation(shader_program_, "projection"), 1, GL_FALSE, glm::value_ptr(proj));
+  glUniformMatrix4fv(glGetUniformLocation(shader_program_, "view"), 1, GL_FALSE, glm::value_ptr(view));
+  glUniformMatrix4fv(glGetUniformLocation(shader_program_, "model"), 1, GL_FALSE, glm::value_ptr(model));
+  Application::CheckGLError(__FILE__, __LINE__);
+  
   glBindVertexArray(vao_); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
   //glDrawArrays(GL_TRIANGLES, 0, 6);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
   // glBindVertexArray(0); // no need to unbind it every time
-  
-  glFlush();
+}
+
+GLuint Game::tex() {
+  std::unique_lock<std::mutex> lck(mtx_render_full_);
+  return tex_[ tex_flip_flop_ ];
 }
 
 void Game::SwapBuffer()
 {
+  std::unique_lock<std::mutex> lck(mtx_render_full_);
+  /*{
+   
+      while (render_full_ && !request_stop_) {
+        if (cv_render_full_.wait_for(lck, std::chrono::milliseconds(16)) == std::cv_status::timeout) ;
+      }
+      if (request_stop_) break;
+    }
+  */
+    //glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    //glClear(GL_COLOR_BUFFER_BIT);
+  glFlush();
+  
   tex_flip_flop_ = (tex_flip_flop_ + 1) % 2;
   int tex_offscreen = (tex_flip_flop_ + 1) % 2;
   
@@ -229,16 +260,10 @@ int Game::Run()
   CompileShader();
   ConfigureVertex();
   
+  glBindFramebuffer(GL_FRAMEBUFFER, fb_);
+  glViewport(0, 0, screen_width_, screen_height_);
+  
   while (!request_stop_) {
-    // Processing ...
-    
-    {
-      std::unique_lock<std::mutex> lck(mtx_render_full_);
-      while (render_full_ && !request_stop_) {
-        if (cv_render_full_.wait_for(lck, std::chrono::milliseconds(16)) == std::cv_status::timeout) ;
-      }
-      if (request_stop_) break;
-    }
     
     Render();
     SwapBuffer();
