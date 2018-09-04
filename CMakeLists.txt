@@ -30,8 +30,10 @@ include_directories(SYSTEM
   ${OPENGL_INCLUDE_DIR}
   ${OPENAL_INCLUDE_DIR}
   ${GLFW_SOURCE_DIR}/include
-  ext/glad/include
-  ext/glm
+  glad/include
+  glm
+  imgui
+  stb
 )
 
 add_executable(openswe1r
@@ -79,8 +81,33 @@ add_executable(openswe1r
   com/a3d.h
   com/d3d.h
 
-  ext/glad/src/glad.c
+  glad/src/glad.c
+
+  imgui/imgui.cpp
+  imgui/imgui.h
+  imgui/imgui_internal.h
+  imgui/imgui_draw.cpp
+  imgui/imgui_widgets.cpp
+  imgui/imconfig.h
+  imgui/imgui_impl_opengl3.cpp
+  imgui/imgui_impl_opengl3.h
+  imgui/imgui_impl_glfw.cpp
+  imgui/imgui_impl_glfw.h
+
+  stb/stb_textedit.h
+  stb/stb_truetype.h
+  stb/stb_rect_pack.h
+  stb/stb_image.h
+
+  glm/glm/glm.hpp
 )
+
+source_group(com com/)
+source_group(dll dll/)
+source_group(imgui imgui/)
+source_group(glad glad/)
+source_group(stb stb/)
+source_group(glm glm/)
 
 if(USE_VM)
   target_compile_definitions(openswe1r PUBLIC -DUC_KVM)

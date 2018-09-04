@@ -6,12 +6,18 @@
 #include <iostream>
 #include <mutex>
 
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+
 #include "Game.hpp"
 
 
 static Application* current_application = nullptr;
 
 std::timed_mutex mutex_gl;
+
+static const char* glsl_version = "#version 330 core";
 
 static const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec2 aPos;\n"
@@ -73,6 +79,19 @@ void Application::Init()
   std::cout << "Renderer: " << glGetString(GL_RENDERER) << std::endl;
   std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
   
+  // Setup Dear ImGui binding
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  //ImGuiIO& io = ImGui::GetIO(); (void)io;
+  //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+  //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+
+  ImGui_ImplGlfw_InitForOpenGL(window_, true);
+  ImGui_ImplOpenGL3_Init(glsl_version);
+
+  // Setup style
+  ImGui::StyleColorsDark();
+
   glfwGetFramebufferSize(window_, &w, &h);
   glViewport(0, 0, w, h);
   
@@ -247,20 +266,43 @@ void Application::Run(Game* game)
   game_ = game;
   glfwSwapInterval(1);
   
-  double lastTime = glfwGetTime();
-  int nbFrames = 0;
+  //double lastTime = glfwGetTime();
+  //int nbFrames = 0;
   
   while (!glfwWindowShouldClose(window_))
   {
     glfwPollEvents();
     
-    /**
-    if (game) {
-      game->Render();
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    {
+        static float f = 0.0f;
+        static int counter = 0;
+        static bool show_demo_window = true;
+        static bool show_another_window = false;
+        static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+        ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+
+        ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
+        ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+        ImGui::Checkbox("Another Window", &show_another_window);
+
+        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+        ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+
+        if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+            counter++;
+        ImGui::SameLine();
+        ImGui::Text("counter = %d", counter);
+
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+        ImGui::End();
     }
-    */
     
-    //if (!LockGL(0)) continue;
+    ImGui::Render();
     
     glBindFramebuffer(GL_FRAMEBUFFER, 0); // back to default
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -280,7 +322,10 @@ void Application::Run(Game* game)
     }
     //UnlockGL();
     
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    
     // Measure speed
+    /**
     double currentTime = glfwGetTime();
     nbFrames++;
     
@@ -290,6 +335,7 @@ void Application::Run(Game* game)
       nbFrames = 0;
       lastTime += 1.0;
     }
+    **/
     
     glfwSwapBuffers(window_);
     
