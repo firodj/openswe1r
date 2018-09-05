@@ -15,8 +15,6 @@ public:
   void Run(Game* game);
   
   void MakeContextCurrent();
-  void CompileShader();
-  void CreateQuad();
   static void CheckGLError(const char *file, int line);
   
   static void OnErrorCallback(int error, const char* description);
@@ -24,7 +22,7 @@ public:
   static void OnFramebufferSizeCallback(GLFWwindow* window, int width, int height);
   
   static Application* Get();
-  static Game* CurrentGame();
+
   GLFWwindow* window() { return window_; }
   
   bool LockGL(int ms);
@@ -36,4 +34,7 @@ private:
   GLFWwindow *window_;
   GLuint quad_shader_program_, quad_vao_, quad_vbo_;
   Game *game_;
+  
+  int window_width_, window_height_;
+  int screen_width_, screen_height_;
 };

@@ -103,14 +103,14 @@ Address CreateInterface(const char* name, unsigned int slotCount, uint32_t objec
     if (export_sym != NULL) {
       if (export_sym->address == 0) {
         hltAddress = CreateHlt();
-        AddHltHandler(hltAddress, export_sym->callback, (void*)slotName);
+        AddHltHandler(hltAddress, export_sym->callback, slotName);
         export_sym->address = hltAddress;
       } else {
         hltAddress = export_sym->address;
       }
     } else {
       hltAddress = CreateHlt();
-      AddHltHandler(hltAddress, UnknownImport, (void*)slotName);
+      AddHltHandler(hltAddress, UnknownImport, slotName);
       AddExport((const char*)slotName, UnknownImport, hltAddress);
     }
     vtable[i] = hltAddress;

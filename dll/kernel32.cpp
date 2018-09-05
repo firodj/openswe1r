@@ -260,7 +260,7 @@ HACKY_IMPORT_BEGIN(GetProcAddress)
   } else {
     //FIXME: Use existing address for export
     Address hltAddress = CreateHlt();
-    AddHltHandler(hltAddress, export_sym->callback, (void*)procName);
+    AddHltHandler(hltAddress, export_sym->callback, procName);
     eax = hltAddress;
     info_printf("Providing at 0x%08X\n", hltAddress);
   }

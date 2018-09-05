@@ -49,7 +49,9 @@ void Game::Init(int w, int h)
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
 #endif
   glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
-  window_ = glfwCreateWindow(w, h, "OpenSWE1R", NULL, Application::Get()->window());
+  window_width_ = w;
+  window_height_ = h;
+  window_ = glfwCreateWindow(window_width_, window_height_, "OpenSWE1R", NULL, Application::Get()->window());
   glfwGetFramebufferSize(window_, &screen_width_, &screen_height_);
   
   hidpi_x_ = (float)screen_width_ / w;

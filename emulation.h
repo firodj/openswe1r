@@ -59,11 +59,10 @@ typedef struct {
 Address AsmX86(const char* CODE, int* psize_encode);
 void DisAsmX86(uint64_t address);
 
-void InitializeEmulation();
+void InitializeEmulation(void* uc_user_data);
 void CleanupEmulation();
 
-void RunEmulation();
-bool StepEmulation();
+bool StepEmulation(void *uc_user_data);
 
 typedef void(*ExportCallback)(uc_engine* uc, Address _address, void* _user_data);
 
@@ -77,7 +76,7 @@ void* Memory(uint32_t address);
 // Hook API
 
 Address CreateHlt();
-void AddHltHandler(Address address, ExportCallback callback, void* user_data);
+void AddHltHandler(Address address, ExportCallback callback, const char* label);
 Address CreateCallback(void* callback, void* user);
 Address CreateInt(uint32_t intno, uint32_t eax);
 Address CreateInt21();

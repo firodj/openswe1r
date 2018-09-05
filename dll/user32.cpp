@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #include "../Application.hpp"
+#include "../Game.hpp"
 
 extern Address wndMainProc;
 
@@ -277,14 +278,16 @@ HACKY_IMPORT_BEGIN(GetStockObject)
 HACKY_IMPORT_END()
 
 //User32.lib
-HACKY_IMPORT_BEGIN(GetSystemMetrics)
-  hacky_printf("nIndex %" PRId32 "\n", stack[1]);
+HACKY_IMPORT_BEGIN2(GetSystemMetrics)
+  my_printf("GetSystemMetrics");
+  my_printf(" nIndex:%" PRId32 "\n", stack[1]);
+  Game *game = reinterpret_cast<Game*>(_user_data);
   switch(stack[1]) {
     case 0:
-      eax = 640; // Horizontal resolution
+      eax = game ? game->window_width() : 640; // Horizontal resolution
       break;
     case 1:
-      eax = 480; // Vertical resolution
+      eax = game ? game->window_height() : 480; // Vertical resolution
       break;
     case 15:
       eax = 0; //FIXME
@@ -298,8 +301,8 @@ HACKY_IMPORT_BEGIN(GetSystemMetrics)
       assert(false);
       break;
   }
-  esp += 1 * 4;
-HACKY_IMPORT_END()
+  //esp += 1 * 4;
+HACKY_IMPORT_END2(1)
 
 //User32.lib
 HACKY_IMPORT_BEGIN2(RegisterClassA)

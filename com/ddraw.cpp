@@ -290,18 +290,17 @@ HACKY_COM_BEGIN(IDirectDraw4, 8)
 HACKY_COM_END()
 
 // IID_IDirectDraw4 -> STDMETHOD(FlipToGDISurface)(THIS) PURE; // 10
-HACKY_COM_BEGIN(IDirectDraw4, 10)
-  hacky_printf("FlipToGDISurface\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  //GLFWwindow* glfwWindow = Application::Get()->window();
-
-  //SDL_GL_SwapWindow(sdlWindow);
-  Application::CurrentGame()->SwapBuffer();
-  //glfwSwapBuffers(glfwWindow);
+HACKY_COM_BEGIN2(IDirectDraw4, 10)
+  my_printf("IDirectDraw4::FlipToGDISurface");
+  my_printf(" this:0x%" PRIX32 "\n", stack[1]);
+  Game *game = reinterpret_cast<Game*>(_user_data);
+  if (game) {
+    game->SwapBuffer();
+  }
 
   eax = 0; // FIXME: No idea what this expects to return..
-  esp += 1 * 4;
-HACKY_COM_END()
+  //esp += 1 * 4;
+HACKY_COM_END2(1)
 
 // IID_IDirectDraw4 -> STDMETHOD(GetCaps)( THIS_ LPDDCAPS, LPDDCAPS) PURE; // 11
 HACKY_COM_BEGIN(IDirectDraw4, 11)
@@ -503,20 +502,18 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 8)
 HACKY_COM_END()
 
 // IDirectDrawSurface4 -> STDMETHOD(Flip)(THIS_ LPDIRECTDRAWSURFACE4, DWORD) PURE; // 11
-HACKY_COM_BEGIN(IDirectDrawSurface4, 11)
-  hacky_printf("Flip\n");
-  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  //GLFWwindow* glfwWindow = Application::Get()->window();
-  
-  //SDL_GL_SwapWindow(sdlWindow);
-  //glfwSwapBuffers(glfwWindow);
-  Application::CurrentGame()->SwapBuffer();
+HACKY_COM_BEGIN2(IDirectDrawSurface4, 11)
+  //my_printf("IDirectDrawSurface4::Flip");
+  //my_printf(" this:0x%" PRIX32, stack[1]);
+  //my_printf(" lpDDSurfaceTargetOverride:0x%" PRIX32, stack[2]);
+  //my_printf(" dwFlags:0x%" PRIX32 "\n", stack[3]);
+  Game* game = reinterpret_cast<Game*>(_user_data);
+  if (game) {
+    game->SwapBuffer();
+  }
 
   eax = 0; // FIXME: No idea what this expects to return..
-  esp += 3 * 4;
-HACKY_COM_END()
+HACKY_COM_END2(3)
 
 // IDirectDrawSurface4 -> STDMETHOD(GetAttachedSurface)(THIS_ LPDDSCAPS2, LPDIRECTDRAWSURFACE4 FAR *) PURE; // 12
 HACKY_COM_BEGIN(IDirectDrawSurface4, 12)

@@ -248,7 +248,7 @@ Exe* LoadExe(const char* path) {
           
           if (export_sym == NULL) {
             Address hltAddress = CreateHlt();
-            AddHltHandler(hltAddress, UnknownImport, (void*)label);
+            AddHltHandler(hltAddress, UnknownImport, label);
             AddExport(label, UnknownImport, hltAddress);
             *symbolAddress = hltAddress;
             sys_printf("missing at 0x%08X\n", hltAddress);
@@ -257,7 +257,7 @@ Exe* LoadExe(const char* path) {
             if (true) { //(export->isVariable == false) {
               Address symAddress = export_sym->hook == 2 ? CreateInt21() : CreateHlt();
               export_sym->thunkAddress = thunkAddress;
-              AddHltHandler(symAddress, export_sym->callback, (void*)label);
+              AddHltHandler(symAddress, export_sym->callback, label);
               *symbolAddress = symAddress;
               sys_printf("found at 0x%08X\n", symAddress);
             } else {

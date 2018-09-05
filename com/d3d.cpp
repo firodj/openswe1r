@@ -1030,11 +1030,11 @@ HACKY_COM_BEGIN(IDirect3DViewport3, 17)
   hacky_printf("pViewport 0x%" PRIX32 "\n", stack[2]);
   API(D3DVIEWPORT2)* vp = (API(D3DVIEWPORT2)*)Memory(stack[2]);
   assert(vp->dwSize == sizeof(API(D3DVIEWPORT2)));
-  //GLFWwindow* glfwWindow = Application::Get()->window();
+  Game *game = reinterpret_cast<Game*>(_user_data);
 
   // Makesure works with high-DPI
-  float scaleX = Application::CurrentGame()->hidpi_x();
-  float scaleY = Application::CurrentGame()->hidpi_y();
+  float scaleX = game ? game->hidpi_x() : 1.0;
+  float scaleY = game ? game->hidpi_y() : 1.0;
 
   clipScale[0] = 2.0f / vp->dvClipWidth;
   clipScale[1] = 2.0f / vp->dvClipHeight;

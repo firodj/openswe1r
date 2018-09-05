@@ -58,7 +58,7 @@ int StarWars::Run()
   
   std::cout << "-- Initializing" << std::endl;
 
-  InitializeEmulation();
+  InitializeEmulation(reinterpret_cast<void*>(this));
 
   CompileShader();
   
@@ -115,7 +115,7 @@ int StarWars::Run()
 
   while (!request_stop_) {
     // Processing ...
-    bool ret = StepEmulation();
+    bool ret = StepEmulation(reinterpret_cast<void*>(this));
     if (!ret) break;
   
     //render_full_ = true;
