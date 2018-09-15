@@ -7,7 +7,11 @@
 
 #define API__DIRECTINPUT_VERSION 0x0600
 
-#include "../windows.h"
+#ifndef _WIN32
+  #include "../ms_windows.h"
+#else
+  #include <windows.h>
+#endif
 
 #include "../export.h"
 #include "../emulation.h"

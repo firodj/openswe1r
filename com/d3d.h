@@ -8,7 +8,11 @@
 #define API__DIRECT3D_VERSION 0x0600
 
 #include "../emulation.h"
-#include "../windows.h"
+#ifndef _WIN32
+  #include "../ms_windows.h"
+#else
+  #include <windows.h>
+#endif
 
 typedef struct {
   void* vtable;

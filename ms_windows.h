@@ -2,8 +2,8 @@
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
-#ifndef __OPENSWE1R_WINDOWS_H__
-#define __OPENSWE1R_WINDOWS_H__
+#ifndef __OPENSWE1R_MS_WINDOWS_H__
+#define __OPENSWE1R_MS_WINDOWS_H__
 
 #include <stdint.h>
 #include <stdarg.h>
@@ -158,4 +158,4 @@ static void strcpy_ucs2(uint16_t* dest, uint16_t* src) {
   } while(*src++ != 0);
 }
     
-#endif
+#endif // __OPENSWE1R_MS_WINDOWS_H__

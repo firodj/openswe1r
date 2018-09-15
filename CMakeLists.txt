@@ -72,7 +72,7 @@ add_executable(openswe1r
 
   descriptor.h
   shaders.h
-  windows.h
+  ms_windows.h
   common.h
   exe.h
 
@@ -93,6 +93,8 @@ add_executable(openswe1r
   imgui/imgui_impl_opengl3.h
   imgui/imgui_impl_glfw.cpp
   imgui/imgui_impl_glfw.h
+  imgui/imgui_demo.cpp
+  imgui/imgui_memory_editor.h
 
   stb/stb_textedit.h
   stb/stb_truetype.h
@@ -133,4 +135,9 @@ target_link_libraries(openswe1r
   ${LIBKEYSTONE_LIBRARY}
   ${LIBCAPSTONE_LIBRARY}
   glfw
+)
+
+set_target_properties(openswe1r
+  PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/game"
 )

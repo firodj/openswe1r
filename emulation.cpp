@@ -208,24 +208,23 @@ static void UcProfilingBlockHook(uc_engine *uc, uint64_t address, uint32_t size,
   // Check where we originated and what kind of instruction it is
   if (heat_address != 0) {
     uint8_t* opcode = (uint8_t*)Memory(heat_address);
-    if (opcode[0] == 0x9A) {
+    if (opcode[0] == 0x9A) { // CALLF
       heat_is_called_next = true;
-    } else if (opcode[0] == 0xE8) {
+    } else if (opcode[0] == 0xE8) { // CALL
       heat_is_called_next = true;
-    } else if (opcode[0] == 0xFF) {
+    } else if (opcode[0] == 0xFF) { // CALL || CALLF
       uint8_t mod = opcode[1] >> 3;
       heat_is_called_next = ((mod == 2) || (mod == 3));
     }
   }
 }
 
-#if 0
 static void UcProfilingHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
-  static Uint64 instruction_started = 0;
+  static uint64_t instruction_started = 0;
   static bool is_called = false;
   static bool is_block_enter = false;
   if (heat_address != 0) {
-    Uint64 instruction_finished;
+    uint64_t instruction_finished;
     GetPerformanceCounter(&instruction_finished);
 
     uint64_t freq;
@@ -235,14 +234,14 @@ static void UcProfilingHook(void* uc, uint64_t address, uint32_t size, void* use
     duration /= freq;
 
     if (heat == NULL) {
-      heat = malloc(0x10000 * sizeof(Heat*));
+      heat = (Heat**) malloc(0x10000 * sizeof(Heat*));
       memset(heat, 0x00, 0x10000 * sizeof(Heat*));
     }
 
     uint32_t page = heat_address >> 16;
     uint32_t index = heat_address & 0xFFFF;
     if (heat[page] == NULL) {
-      heat[page] = malloc(0x10000 * sizeof(Heat));
+      heat[page] = (Heat*) malloc(0x10000 * sizeof(Heat));
       memset(heat[page], 0x00, 0x10000 * sizeof(Heat));
     }
     Heat* h = &heat[page][index];
@@ -293,10 +292,10 @@ void DumpProfilingHeat(const char* path) {
   }
 
   if (f != stdout) {
+    sys_printf("Done DumpProfilingHeat into %s\n", path);
     fclose(f);
   }
 }
-#endif
 
 
 void MapMemory(void* memory, uint32_t address, uint32_t size, bool read, bool write, bool execute) {
@@ -497,28 +496,6 @@ void AddHltHandler(Address address, ExportCallback callback, const char* label) 
   qsort(hltHandlers, hltHandlerCount, sizeof(HltHandler), compareHltHandlers);
 }
 
-#if 0
-
-//FIXME: Bad to use allocate in this file..?
-Address CreateCallback(void* callback, void* user) {
-  //FIXME: This might be faster, but needs some more work..
-  Address address = Allocate(1 + 1 + strlen(user) + 1);
-  static bool hooked = false;
-  if (hooked == false) {
-    uc_hook interruptHook;
-    uc_hook_add(uc, &interruptHook, UC_HOOK_INTR, callback, NULL, 1, 0);
-    hooked = true;
-  }
-  uint8_t* code = Memory(address);
-  code[0] = 0xCC;
-  code[1] = 0xC3;
-  strcpy(&code[2], user);
-  
-  return address;
-}
-
-#endif
-
 void UcInterruptHook(uc_engine *uc, uint32_t intno, void *user_data)
 {
     bool silent = false;
@@ -551,115 +528,12 @@ void UcInterruptHook(uc_engine *uc, uint32_t intno, void *user_data)
     }
 }
 
-void InitializeEmulation(void *uc_user_data) {
-
-  uc_err err;
-
-  err = uc_open(UC_ARCH_X86, UC_MODE_32, &uc);
-  if (err) {
-    info_printf("Failed on uc_open() with error returned %u: %s\n", err, uc_strerror(err));
-  }
-
-#ifndef UC_KVM
-  // Add hooks to catch errors
-  uc_hook errorHooks[6];
-  {
-    // Hook for memory read on unmapped memory
-    uc_hook_add(uc, &errorHooks[0], UC_HOOK_MEM_READ_UNMAPPED, (void*)UcErrorHook, uc_user_data, 1, 0);
-
-    // Hook for invalid memory write events
-    uc_hook_add(uc, &errorHooks[1], UC_HOOK_MEM_WRITE_UNMAPPED, (void*)UcErrorHook, uc_user_data, 1, 0);
-
-    // Hook for invalid memory fetch for execution events
-    uc_hook_add(uc, &errorHooks[2], UC_HOOK_MEM_FETCH_UNMAPPED, (void*)UcErrorHook, uc_user_data, 1, 0);
-
-    // Hook for memory read on read-protected memory
-    uc_hook_add(uc, &errorHooks[3], UC_HOOK_MEM_READ_PROT, (void*)UcErrorHook, uc_user_data, 1, 0);
-
-    // Hook for memory write on write-protected memory
-    uc_hook_add(uc, &errorHooks[4], UC_HOOK_MEM_WRITE_PROT, (void*)UcErrorHook, uc_user_data, 1, 0);
-
-    // Hook for memory fetch on non-executable memory
-    uc_hook_add(uc, &errorHooks[5], UC_HOOK_MEM_FETCH_PROT, (void*)UcErrorHook, uc_user_data, 1, 0);
-  }
-    
-  uc_hook interruptHook;
-  uc_hook_add(uc, &interruptHook, UC_HOOK_INTR, (void*)UcInterruptHook, uc_user_data, 1, 0);
-#endif
-
-#ifndef UC_KVM
-  // Setup segments
-  SegmentDescriptor* gdtEntries = (SegmentDescriptor*)aligned_malloc(ucAlignment, AlignUp(gdtSize, ucAlignment));
-  memset(gdtEntries, 0x00, gdtSize);
-
-  gdtEntries[14] = CreateDescriptor(0x00000000, 0xFFFFF000, true);  // CS
-  gdtEntries[15] = CreateDescriptor(0x00000000, 0xFFFFF000, false);  // DS
-  gdtEntries[16] = CreateDescriptor(tlsAddress, tlsSize - 1, false); // FS
-
-  //FIXME: Remove? We never switch to ring 0 anyway (Came from UC sample code)
-  gdtEntries[17] = CreateDescriptor(0x00000000, 0xFFFFF000, false);  // Ring 0
-  gdtEntries[17].dpl = 0;  //set descriptor privilege level
-
-  err = uc_mem_map_ptr(uc, gdtAddress, AlignUp(gdtSize, ucAlignment), UC_PROT_WRITE | UC_PROT_READ, gdtEntries);
-
-  uc_x86_mmr gdtr;
-  gdtr.base = gdtAddress;  
-  gdtr.limit = gdtSize - 1;
-  err = uc_reg_write(uc, UC_X86_REG_GDTR, &gdtr);
-
-  int cs = 0x73;
-  err = uc_reg_write(uc, UC_X86_REG_CS, &cs);
-
-  int ds = 0x7B;
-  err = uc_reg_write(uc, UC_X86_REG_DS, &ds);
-
-  int es = 0x7B;
-  err = uc_reg_write(uc, UC_X86_REG_ES, &es);
-
-  int fs = 0x83;
-  err = uc_reg_write(uc, UC_X86_REG_FS, &fs);
-
-  //FIXME: Do we require GS?!
-
-//  int ss = 0x7B;
-  int ss = 0x88; // Ring 0 - Why?!
-  err = uc_reg_write(uc, UC_X86_REG_SS, &ss);
-#endif
-
-#if 0
-  //FIXME: Steal actual register values, consult Windows ABI
-  //https://github.com/corkami/docs/blob/master/InitialValues.md
-  int eax;
-  int ebx;
-  int ecx;
-  int edx;
-  uc_reg_write(uc, UC_X86_REG_EAX, &eax);
-  uc_reg_write(uc, UC_X86_REG_EBX, &ebx);
-  uc_reg_write(uc, UC_X86_REG_ECX, &ecx);
-  uc_reg_write(uc, UC_X86_REG_EDX, &edx);
-#endif
-
-  // Map and set TLS (not exposed via flat memory)
-  uint8_t* tls = (uint8_t*)aligned_malloc(ucAlignment, tlsSize);
-  memset(tls, 0xBB, tlsSize);
-  err = uc_mem_map_ptr(uc, tlsAddress, tlsSize, UC_PROT_WRITE | UC_PROT_READ, tls);
-
-  // Allocate a heap
-  heap = (uint8_t*)aligned_malloc(ucAlignment, heapSize);
-  memset(heap, 0xAA, heapSize);
-  MapMemory(heap, heapAddress, heapSize, true, true, true);
-  
-  wndMainProc = Allocate(sizeof(uint32_t));
-  *(uint32_t*)Memory(wndMainProc) = 0;
-}
-
-#if 0
 void SetTracing(bool enabled) {
   // Add a trace hook so we get proper EIP after running
   static uc_hook traceHook = -1;
   if (enabled) {
     if (traceHook == -1) {
-      uc_hook_add(uc, &traceHook, UC_HOOK_CODE, UcTraceHook, NULL, 1, 0);
+      uc_hook_add(uc, &traceHook, UC_HOOK_CODE, (void*)UcTraceHook, NULL, 1, 0);
     }
   } else {
     if (traceHook != -1) {
@@ -708,7 +582,6 @@ void SetProfiling(bool enabled) {
     }
   }
 }
-#endif
 
 Address CreateThreadBegin()
 {
@@ -737,6 +610,111 @@ Address CreateThreadBegin()
     *code++ = 0xF4; // HLT;
     
     return thread_begin;
+}
+
+
+void InitializeEmulation(void *uc_user_data) {
+
+  uc_err err;
+
+  err = uc_open(UC_ARCH_X86, UC_MODE_32, &uc);
+  if (err) {
+    info_printf("Failed on uc_open() with error returned %u: %s\n", err, uc_strerror(err));
+  }
+
+#ifndef UC_KVM
+  // Add hooks to catch errors
+  uc_hook errorHooks[6];
+  {
+    // Hook for memory read on unmapped memory
+    uc_hook_add(uc, &errorHooks[0], UC_HOOK_MEM_READ_UNMAPPED, (void*)UcErrorHook, uc_user_data, 1, 0);
+
+    // Hook for invalid memory write events
+    uc_hook_add(uc, &errorHooks[1], UC_HOOK_MEM_WRITE_UNMAPPED, (void*)UcErrorHook, uc_user_data, 1, 0);
+
+    // Hook for invalid memory fetch for execution events
+    uc_hook_add(uc, &errorHooks[2], UC_HOOK_MEM_FETCH_UNMAPPED, (void*)UcErrorHook, uc_user_data, 1, 0);
+
+    // Hook for memory read on read-protected memory
+    uc_hook_add(uc, &errorHooks[3], UC_HOOK_MEM_READ_PROT, (void*)UcErrorHook, uc_user_data, 1, 0);
+
+    // Hook for memory write on write-protected memory
+    uc_hook_add(uc, &errorHooks[4], UC_HOOK_MEM_WRITE_PROT, (void*)UcErrorHook, uc_user_data, 1, 0);
+
+    // Hook for memory fetch on non-executable memory
+    uc_hook_add(uc, &errorHooks[5], UC_HOOK_MEM_FETCH_PROT, (void*)UcErrorHook, uc_user_data, 1, 0);
+  }
+  
+  uc_hook interruptHook;
+  uc_hook_add(uc, &interruptHook, UC_HOOK_INTR, (void*)UcInterruptHook, uc_user_data, 1, 0);
+#endif
+
+#ifndef UC_KVM
+  // Setup segments
+  SegmentDescriptor* gdtEntries = (SegmentDescriptor*)aligned_malloc(ucAlignment, AlignUp(gdtSize, ucAlignment));
+  memset(gdtEntries, 0x00, gdtSize);
+
+  gdtEntries[14] = CreateDescriptor(0x00000000, 0xFFFFF000, true);  // CS
+  gdtEntries[15] = CreateDescriptor(0x00000000, 0xFFFFF000, false);  // DS
+  gdtEntries[16] = CreateDescriptor(tlsAddress, tlsSize - 1, false); // FS
+
+  //FIXME: Remove? We never switch to ring 0 anyway (Came from UC sample code)
+  gdtEntries[17] = CreateDescriptor(0x00000000, 0xFFFFF000, false);  // Ring 0
+  gdtEntries[17].dpl = 0;  //set descriptor privilege level
+
+  err = uc_mem_map_ptr(uc, gdtAddress, AlignUp(gdtSize, ucAlignment), UC_PROT_WRITE | UC_PROT_READ, gdtEntries);
+
+  uc_x86_mmr gdtr;
+  gdtr.base = gdtAddress;
+  gdtr.limit = gdtSize - 1;
+  err = uc_reg_write(uc, UC_X86_REG_GDTR, &gdtr);
+
+  int cs = 0x73;
+  err = uc_reg_write(uc, UC_X86_REG_CS, &cs);
+
+  int ds = 0x7B;
+  err = uc_reg_write(uc, UC_X86_REG_DS, &ds);
+
+  int es = 0x7B;
+  err = uc_reg_write(uc, UC_X86_REG_ES, &es);
+
+  int fs = 0x83;
+  err = uc_reg_write(uc, UC_X86_REG_FS, &fs);
+
+  //FIXME: Do we require GS?!
+
+//  int ss = 0x7B;
+  int ss = 0x88; // Ring 0 - Why?!
+  err = uc_reg_write(uc, UC_X86_REG_SS, &ss);
+#endif
+
+#if 0
+  //FIXME: Steal actual register values, consult Windows ABI
+  //https://github.com/corkami/docs/blob/master/InitialValues.md
+  int eax;
+  int ebx;
+  int ecx;
+  int edx;
+  uc_reg_write(uc, UC_X86_REG_EAX, &eax);
+  uc_reg_write(uc, UC_X86_REG_EBX, &ebx);
+  uc_reg_write(uc, UC_X86_REG_ECX, &ecx);
+  uc_reg_write(uc, UC_X86_REG_EDX, &edx);
+#endif
+
+  // Map and set TLS (not exposed via flat memory)
+  uint8_t* tls = (uint8_t*)aligned_malloc(ucAlignment, tlsSize);
+  memset(tls, 0xBB, tlsSize);
+  err = uc_mem_map_ptr(uc, tlsAddress, tlsSize, UC_PROT_WRITE | UC_PROT_READ, tls);
+
+  // Allocate a heap
+  heap = (uint8_t*)aligned_malloc(ucAlignment, heapSize);
+  memset(heap, 0xAA, heapSize);
+  MapMemory(heap, heapAddress, heapSize, true, true, true);
+  
+  wndMainProc = Allocate(sizeof(uint32_t));
+  *(uint32_t*)Memory(wndMainProc) = 0;
+  
+  //SetProfiling(true);
 }
 
 unsigned int CreateEmulatedThread(uint32_t eip, bool suspended) {
@@ -832,7 +810,6 @@ bool StepEmulation(void *uc_user_data) {
   while(ctx->active && ctx->running) {
     err = uc_emu_start(uc, ctx->eip, 0, 0, 3000000);
 
-#if 0
     // Finish profiling, if we have partial data
     if (heat_address != 0) {
       // Signal block exit by marking the next instruction as block entry
@@ -844,7 +821,7 @@ bool StepEmulation(void *uc_user_data) {
       // Setting address to zero signals that no profiling sample has started
       heat_address = 0;
     }
-#endif
+
     // Check for errors
     if (err != 0) {
       break;
@@ -893,4 +870,6 @@ bool StepEmulation(void *uc_user_data) {
 
 void CleanupEmulation(void) {
   uc_close(uc);
+  
+  //DumpProfilingHeat("profiling.heat");
 }

@@ -82,7 +82,12 @@ uint32_t tls[1000] = {0};
 #include "shader.h"
 
 
-#include "windows.h" // Hack while exports are not ready
+// Hack while exports are not ready
+#ifndef _WIN32
+  #include "ms_windows.h"
+#else
+  #include <windows.h>
+#endif
 // HACK:
 #include <unicorn/unicorn.h>
 
