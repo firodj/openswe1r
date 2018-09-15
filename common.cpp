@@ -78,6 +78,7 @@ bool GetPerformanceFrequency(uint64_t* lpFrequency)
 
 #ifdef _WIN32
 #include <mmsystem.h>
+#pragma comment( lib, "Winmm.lib" )
 
 /* The first (low-resolution) ticks value of the application */
 static DWORD start = 0;
@@ -139,4 +140,29 @@ uint32_t GetTicks(void)
 
 	return (now - start);
 }
+
+bool GetPerformanceCounter(uint64_t* lpPerformanceCount)
+{
+	LARGE_INTEGER counter;
+
+	if (!QueryPerformanceCounter(&counter)) {
+		*lpPerformanceCount = GetTicks();
+	} else {
+		*lpPerformanceCount = counter.QuadPart;
+	}
+	return *lpPerformanceCount;
+}
+
+bool GetPerformanceFrequency(uint64_t* lpFrequency)
+{
+	LARGE_INTEGER frequency;
+
+	if (!QueryPerformanceFrequency(&frequency)) {
+		*lpFrequency = 1000;
+	} else {
+		*lpFrequency = frequency.QuadPart;
+	}
+	return *lpFrequency;
+}
+
 #endif

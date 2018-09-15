@@ -15,12 +15,15 @@ typedef struct {
 
 
 ExportLibrary* RegisterExportLibrary(const char* name) {
+	return nullptr;
 }
 
 ExportLibrary* FindExportLibrary(const char* name) {
+	return nullptr;
 }
 
 ExportFunction* FindExportFunction(const char* name) {
+	return nullptr;
 }
 
 void RegisterExportFunction(ExportLibrary* library, const char* name) {
