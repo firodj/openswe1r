@@ -55,8 +55,8 @@ static void aligned_free(void* ptr) {
 #if defined(__APPLE__)
     bool GetPerformanceCounter(uint64_t* lpPerformanceCount);
     bool GetPerformanceFrequency(uint64_t* lpFrequency);
-    uint32_t GetTicks(void);
 #endif
 
+uint32_t GetTicks(void);
 
 #endif

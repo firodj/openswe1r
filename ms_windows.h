@@ -86,12 +86,12 @@ enum {
   API(VK_RMENU) = 0xA5
 };
 
-typedef struct tagPOINT {
+typedef struct API__tagPOINT {
     API(LONG) x;
     API(LONG) y;
 } API(POINT);
 
-typedef struct tagMSG {
+typedef struct API__tagMSG {
     uint32_t   hwnd;
     API(UINT)   message;
     uint32_t wParam;
@@ -101,7 +101,7 @@ typedef struct tagMSG {
     API(DWORD)  lPrivate;
 } API(MSG);
 
-typedef struct tagWNDCLASSA {
+typedef struct API__tagWNDCLASSA {
   API(UINT)  style;
   Address    lpfnWndProc;
   int32_t    cbClsExtra;
@@ -114,7 +114,7 @@ typedef struct tagWNDCLASSA {
   Address    lpszClassName;
 } API(WNDCLASSA);
 
-typedef struct tagWNDCLASSEXA {
+typedef struct API__tagWNDCLASSEXA {
   API(UINT)  cbSize;
   API(UINT)  style;
   Address     lpfnWndProc;

@@ -129,6 +129,8 @@ if(ENET_FOUND)
   )
 endif()
 
+target_compile_definitions(openswe1r PUBLIC  -D_CRT_SECURE_NO_WARNINGS)
+
 target_link_libraries(openswe1r
   ${OPENGL_LIBRARIES}
   ${OPENAL_LIBRARY}

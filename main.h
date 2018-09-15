@@ -5,6 +5,7 @@
 #ifndef __OPENSWE1R_MAIN_H__
 #define __OPENSWE1R_MAIN_H__
 
+#include <inttypes.h>
 #include <unicorn/unicorn.h>
 
 #include "emulation.h"

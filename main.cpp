@@ -9,7 +9,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <inttypes.h>
 #include <assert.h>
 #include <ctype.h>
 #include <thread>
@@ -83,11 +82,8 @@ uint32_t tls[1000] = {0};
 
 
 // Hack while exports are not ready
-#ifndef _WIN32
-  #include "ms_windows.h"
-#else
-  #include <windows.h>
-#endif
+#include "ms_windows.h"
+
 // HACK:
 #include <unicorn/unicorn.h>
 

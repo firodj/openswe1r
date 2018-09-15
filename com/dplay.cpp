@@ -3,11 +3,7 @@
 // Refer to the included LICENSE.txt file.
 
 #include "../main.h"
-#ifndef _WIN32
-  #include "../ms_windows.h"
-#else
-  #include <windows.h>
-#endif
+#include "../ms_windows.h"
 
 #include <inttypes.h>
 #include <stdint.h>
