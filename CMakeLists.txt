@@ -11,15 +11,14 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 find_package(OpenGL REQUIRED)
 find_package(OpenAL REQUIRED)
 
-set(UNICORN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/kebun-kuda/unicorn)
-add_subdirectory(kebun-kuda/unicorn_cmake)
+add_subdirectory(kebun-kuda/unicorn)
 add_subdirectory(kebun-kuda/keystone)
 add_subdirectory(kebun-kuda/capstone)
 add_subdirectory(ext/glfw)
 add_subdirectory(ext/enet)
 
 include_directories(SYSTEM
-  ${UNICORN_DIR}/include
+  ${unicorn_SOURCE_DIR}/include
   ${keystone_SOURCE_DIR}/include
   ${capstone_SOURCE_DIR}/include
   ${OPENGL_INCLUDE_DIR}
