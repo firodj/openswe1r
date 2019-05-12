@@ -35,18 +35,18 @@ void StarWars::CompileShader()
   glCullFace(GL_FRONT);
 
   std::cout << "-- Compiling shaders" << std::endl;
-  
+
   GLuint shader1Texture = 0;
   {
     GLuint vertexShader = CreateShader(VertexShader1Texture, GL_VERTEX_SHADER);
     GLuint fragmentShader = CreateShader(FragmentShader1Texture, GL_FRAGMENT_SHADER);
     shader1Texture = CreateShaderProgram(vertexShader, fragmentShader);
   }
-  
+
   bool linked = LinkShaderProgram(shader1Texture);
   PrintShaderProgramLog(shader1Texture);
   assert(linked);
-  
+
   shader_program_ = shader1Texture;
   glUseProgram(shader_program_); //FIXME: Hack..
 }
@@ -55,21 +55,21 @@ int StarWars::Run()
 {
   std::cout << "StarWars thread start" << std::endl;
   glfwMakeContextCurrent(window_);
-  
+
   std::cout << "-- Initializing" << std::endl;
 
   InitializeEmulation(reinterpret_cast<void*>(this));
 
   CompileShader();
-  
+
   // Initialize
-  
+
   std::cout << "-- Loading exe" << std::endl;
-  
+
   Exe *exe = LoadExe(exeName);
   if (exe == NULL) {
     std::cout << "Couldn't load " << exeName << std::endl;
-    exit(EXIT_FAILURE);
+    return 0; // exit(EXIT_FAILURE);
   }
   RelocateExe(exe);
 
@@ -83,17 +83,17 @@ int StarWars::Run()
   } else if (exe->coffHeader.timeDateStamp == 0x3c60692c) {
     std::cout << "Game version: Patched, English" << std::endl;
   } else if (exe->coffHeader.timeDateStamp == 0x3c6321d1) {
-    std::cout << "Game version: Patched, International" << std::endl;
+   std::cout << "Game version: Patched, International" << std::endl;
   } else {
     std::cout << "Game version: Unknown (COFF timestamp: " << exe->coffHeader.timeDateStamp << ")" << std::endl;
     assert(false);
   }
-  
+
   clearEax = Allocate(3);
   uint8_t* p = (uint8_t*)Memory(clearEax);
   *p++ = 0x31; *p++ = 0xC0; // xor eax, eax
   *p++ = 0xC3;              // ret
-  
+
   // Map the important exe parts into emu memory
   for(unsigned int sectionIndex = 0; sectionIndex < exe->coffHeader.numberOfSections; sectionIndex++) {
     PeSection* section = &exe->sections[sectionIndex];
@@ -107,7 +107,7 @@ int StarWars::Run()
 
   //FIXME: Schedule a virtual main-thread
   std::cout << "Emulation starting" << std::endl;
-  
+
   CreateEmulatedThread(exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint, false);
 
   glBindFramebuffer(GL_FRAMEBUFFER, fb_);
@@ -117,14 +117,14 @@ int StarWars::Run()
     // Processing ...
     bool ret = StepEmulation(reinterpret_cast<void*>(this));
     if (!ret) break;
-  
+
     //render_full_ = true;
   }
-  
+
   CleanupEmulation();
-  
+
   UnloadExe(exe);
-  
+
   return 0;
 }
 

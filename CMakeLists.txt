@@ -8,28 +8,29 @@ set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
+find_package(OpenGL REQUIRED)
+find_package(OpenAL REQUIRED)
+
 set(UNICORN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/kebun-kuda/unicorn)
 add_subdirectory(kebun-kuda/unicorn_cmake)
 add_subdirectory(kebun-kuda/keystone)
 add_subdirectory(kebun-kuda/capstone)
+add_subdirectory(ext/glfw)
 add_subdirectory(ext/enet)
-find_package(OpenGL REQUIRED)
-find_package(OpenAL REQUIRED)
-
-add_subdirectory (ext/glfw)
 
 include_directories(SYSTEM
-  kebun-kuda/keystone/include
-  kebun-kuda/capstone/include
-  kebun-kuda/unicorn/include
+  ${UNICORN_DIR}/include
+  ${keystone_SOURCE_DIR}/include
+  ${capstone_SOURCE_DIR}/include
   ${OPENGL_INCLUDE_DIR}
   ${OPENAL_INCLUDE_DIR}
-  ${GLFW_SOURCE_DIR}/include
-  ext/enet/include
   glad/include
-  glm
-  imgui
-  stb
+  ${GLFW_SOURCE_DIR}/include
+  ${enet_SOURCE_DIR}/include
+  ext/glm
+  ext/imgui
+  ext/imgui/examples
+  ext/stb
 )
 
 add_executable(openswe1r
@@ -79,33 +80,33 @@ add_executable(openswe1r
 
   glad/src/glad.c
 
-  imgui/imgui.cpp
-  imgui/imgui.h
-  imgui/imgui_internal.h
-  imgui/imgui_draw.cpp
-  imgui/imgui_widgets.cpp
-  imgui/imconfig.h
-  imgui/imgui_impl_opengl3.cpp
-  imgui/imgui_impl_opengl3.h
-  imgui/imgui_impl_glfw.cpp
-  imgui/imgui_impl_glfw.h
-  imgui/imgui_demo.cpp
-  imgui/imgui_memory_editor.h
+  ext/imgui/imgui.cpp
+  ext/imgui/imgui.h
+  ext/imgui/imgui_internal.h
+  ext/imgui/imgui_draw.cpp
+  ext/imgui/imgui_widgets.cpp
+  ext/imgui/imconfig.h
+  ext/imgui/examples/imgui_impl_opengl3.cpp
+  ext/imgui/examples/imgui_impl_opengl3.h
+  ext/imgui/examples/imgui_impl_glfw.cpp
+  ext/imgui/examples/imgui_impl_glfw.h
+  ext/imgui/imgui_demo.cpp
+  ext/imgui_club/imgui_memory_editor/imgui_memory_editor.h
 
-  stb/stb_textedit.h
-  stb/stb_truetype.h
-  stb/stb_rect_pack.h
-  stb/stb_image.h
+  ext/stb/stb_textedit.h
+  ext/stb/stb_truetype.h
+  ext/stb/stb_rect_pack.h
+  ext/stb/stb_image.h
 
-  glm/glm/glm.hpp
+  ext/glm/glm/glm.hpp
 )
 
 source_group(com com/)
 source_group(dll dll/)
-source_group(imgui imgui/)
 source_group(glad glad/)
-source_group(stb stb/)
-source_group(glm glm/)
+source_group(imgui ext/imgui/)
+source_group(stb ext/stb/)
+source_group(glm ext/glm/)
 
 if(USE_VM)
   target_compile_definitions(openswe1r PUBLIC -DUC_KVM)
@@ -123,7 +124,9 @@ target_link_libraries(openswe1r
   enet
 )
 
-target_compile_definitions(openswe1r PUBLIC  -D_CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(openswe1r PUBLIC
+  -DIMGUI_IMPL_OPENGL_LOADER_GLAD
+  -D_CRT_SECURE_NO_WARNINGS)
 
 target_link_libraries(openswe1r
   ${OPENGL_LIBRARIES}

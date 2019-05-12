@@ -1,6 +1,6 @@
 #include "main.h"
 #ifndef _WIN32
-  #include "../ms_windows.h"
+  #include "ms_windows.h"
 #else
   #include <windows.h>
 #endif
@@ -45,10 +45,10 @@ default:
 
 void LoadSection(Exe* exe, unsigned int sectionIndex) {
     PeSection* section = &exe->sections[sectionIndex];
-    
+
     // Map memory for section
     uint8_t* mem = (uint8_t*)aligned_malloc(0x1000, section->virtualSize);
-    
+
     // Read data from exe and fill rest of space with zero
     fseek(exe->f, section->rawAddress, SEEK_SET);
     uint32_t rawSize = section->rawSize;
@@ -59,7 +59,7 @@ void LoadSection(Exe* exe, unsigned int sectionIndex) {
     if (rawSize < section->virtualSize) {
         memset(&mem[rawSize], 0x00, section->virtualSize - rawSize);
     }
-    
+
     // Write back address to the exe object
     exe->mappedSections[sectionIndex] = mem;
 }
@@ -99,7 +99,7 @@ Exe* LoadExe(const char* path) {
   fread(&exe->coffHeader, 1, sizeof(exe->coffHeader), exe->f);
   sys_printf("Machine type: 0x%" PRIX16 "\n", exe->coffHeader.machine);
   sys_printf("Number of sections: %" PRIu16 "\n", exe->coffHeader.numberOfSections);
-  
+
   // Read optional PE header
   assert(exe->coffHeader.sizeOfOptionalHeader >= sizeof(exe->peHeader));
   fread(&exe->peHeader, 1, sizeof(exe->peHeader), exe->f);
@@ -154,7 +154,7 @@ Exe* LoadExe(const char* path) {
         uint16_t relocation = relocations[i];
         unsigned int type = relocation >> 12;
         unsigned int offset = relocation & 0xFFF;
-    
+
         sys_printf("  Relocation (type %d) at 0x%" PRIX32 "\n", type, exe->peHeader.imageBase + baseRelocation->virtualAddress + offset);
         switch(type) {
           case 0: // IMAGE_REL_BASED_ABSOLUTE
@@ -171,7 +171,7 @@ Exe* LoadExe(const char* path) {
 
       relocationRva += baseRelocation->sizeOfBlock;
       remainingSize -= baseRelocation->sizeOfBlock;
-    }    
+    }
   }
 
 
@@ -249,7 +249,7 @@ Exe* LoadExe(const char* path) {
         } else
 #endif
         {
-          
+
           if (export_sym == NULL) {
             Address hltAddress = CreateHlt();
             AddHltHandler(hltAddress, UnknownImport, label);
@@ -271,7 +271,7 @@ Exe* LoadExe(const char* path) {
           }
 
         }
-        
+
         // Jump to next imported symbol
         originalThunkAddress += 4;
         thunkAddress += 4;
