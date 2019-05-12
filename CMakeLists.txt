@@ -8,28 +8,24 @@ set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
-find_package(ENet)
-find_package(Unicorn REQUIRED)
-find_package(Keystone REQUIRED)
-find_package(Capstone REQUIRED)
+set(UNICORN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/kebun-kuda/unicorn)
+add_subdirectory(kebun-kuda/unicorn_cmake)
+add_subdirectory(kebun-kuda/keystone)
+add_subdirectory(kebun-kuda/capstone)
+add_subdirectory(ext/enet)
 find_package(OpenGL REQUIRED)
 find_package(OpenAL REQUIRED)
 
 add_subdirectory (ext/glfw)
 
-if(ENET_FOUND)
-  include_directories(SYSTEM
-    ${ENET_INCLUDE_DIR}
-  )
-endif()
-
 include_directories(SYSTEM
-  ${LIBUNICORN_INCLUDE_DIR}
-  ${LIBKEYSTONE_INCLUDE_DIR}
-  ${LIBCAPSTONE_INCLUDE_DIR}
+  kebun-kuda/keystone/include
+  kebun-kuda/capstone/include
+  kebun-kuda/unicorn/include
   ${OPENGL_INCLUDE_DIR}
   ${OPENAL_INCLUDE_DIR}
   ${GLFW_SOURCE_DIR}/include
+  ext/enet/include
   glad/include
   glm
   imgui
@@ -50,7 +46,7 @@ add_executable(openswe1r
   Game.hpp
   StarWars.cpp
   StarWars.hpp
-  
+
   dll/kernel32.cpp
   dll/user32.cpp
   dll/gdi32.cpp
@@ -118,24 +114,22 @@ if(USE_VM)
   )
 else()
   target_link_libraries(openswe1r
-    ${LIBUNICORN_LIBRARY}
+    unicorn-static
   )
 endif()
 
-if(ENET_FOUND)
-  target_compile_definitions(openswe1r PUBLIC -DDPLAY_ENET)
-  target_link_libraries(openswe1r
-    ${ENET_LIBRARIES}
-  )
-endif()
+target_compile_definitions(openswe1r PUBLIC -DDPLAY_ENET)
+target_link_libraries(openswe1r
+  enet
+)
 
 target_compile_definitions(openswe1r PUBLIC  -D_CRT_SECURE_NO_WARNINGS)
 
 target_link_libraries(openswe1r
   ${OPENGL_LIBRARIES}
   ${OPENAL_LIBRARY}
-  ${LIBKEYSTONE_LIBRARY}
-  ${LIBCAPSTONE_LIBRARY}
+  keystone
+  capstone-static
   glfw
 )
 

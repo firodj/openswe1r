@@ -10,3 +10,9 @@
 [submodule "ext/stb"]
 	path = ext/stb
 	url = https://github.com/nothings/stb.git
+[submodule "ext/enet"]
+	path = ext/enet
+	url = https://github.com/lsalzman/enet.git
+[submodule "kebun-kuda"]
+	path = kebun-kuda
+	url = https://github.com/firodj/kebun-kuda
