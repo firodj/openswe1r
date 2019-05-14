@@ -10,6 +10,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 find_package(OpenGL REQUIRED)
 find_package(OpenAL REQUIRED)
+find_package(Vulkan)
 
 add_subdirectory(kebun-kuda/unicorn)
 add_subdirectory(kebun-kuda/keystone)
@@ -135,7 +136,18 @@ target_link_libraries(openswe1r
   glfw
 )
 
+if(Vulkan_FOUND)
+  target_compile_definitions(openswe1r PRIVATE GLFW_INCLUDE_VULKAN)
+  target_link_libraries(openswe1r Vulkan::Vulkan)
+endif(Vulkan_FOUND)
+
 set_target_properties(openswe1r
   PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/game"
 )
+if (MSVC)
+  target_link_libraries(openswe1r winmm ws2_32)
+endif(MSVC)
+
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  PROPERTY VS_STARTUP_PROJECT openswe1r)
